@@ -1,0 +1,9 @@
+*.code-workspace
+.env
+.env*
+.DS_Store
+
+.cache/
+/build
+node_modules
+/public/build
