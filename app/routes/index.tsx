@@ -3,6 +3,7 @@ import { ActionFunction, Form, json, redirect, useActionData } from "remix";
 
 import type {
   CustomValidations,
+  ErrorMessages,
   FormValidations,
   ServerFormInfo,
 } from "~/remix-enhanced-forms";
@@ -21,7 +22,6 @@ type ActionData = {
 const formValidations: FormValidations = {
   firstName: {
     required: true,
-    minLength: 5,
   },
   middleInitial: {
     pattern: "^[a-zA-Z]{1}$",
@@ -32,6 +32,10 @@ const formValidations: FormValidations = {
   },
 };
 
+// TODO: Inline with the above and use types detection?
+//  - Reserved attrs are built-in
+//  - Functions are automatically custom
+//  - Disambiguate string for fetcher?
 const customValidations: CustomValidations = {
   firstName: {
     mustBeMatt(value) {
@@ -39,15 +43,9 @@ const customValidations: CustomValidations = {
     },
   },
   lastName: {
-    mustBeSomething: {
-      validate(value, attrValue) {
-        return value.toLowerCase() === attrValue;
-      },
-      // TODO: How useful is this in reality?  What is the use-case that they
-      // can't make separate validate functions with the embedded value at
-      // runtime?  Or is there a legit use case for passing this value into
-      // validate?
-      attrValue: "brophy",
+    async mustBeBrophy(value) {
+      await new Promise((r) => setTimeout(r, 1000));
+      return value.toLowerCase() === "brophy";
     },
   },
   /**
@@ -67,11 +65,21 @@ const customValidations: CustomValidations = {
    */
 };
 
+const errorMessages: ErrorMessages = {
+  valueMissing: "Hey, yo, this field is required!",
+  mustBeMatt: "This field must have a value of 'matt'",
+  mustBeBrophy: "This field must have a value of 'brophy'",
+};
+
 export const action: ActionFunction = async ({ request }) => {
   const formData = await request.formData();
 
   // Validate server-side using the same validations specified in the <input>
-  const serverFormInfo = validateServerFormData(formData, formValidations);
+  const serverFormInfo = await validateServerFormData(
+    formData,
+    formValidations,
+    customValidations
+  );
   if (!serverFormInfo.valid) {
     return json<ActionData>({ serverFormInfo });
   }
@@ -105,6 +113,7 @@ export default function Index() {
         value={{
           formValidations,
           customValidations,
+          errorMessages,
           requiredNotation: "*",
           serverFormInfo: actionData?.serverFormInfo,
           debug,
