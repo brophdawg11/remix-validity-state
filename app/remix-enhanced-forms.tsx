@@ -1,17 +1,17 @@
-import {
-  createContext,
-  FormEvent,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 ////////////////////////////////////////////////////////////////////////////////
 //#region Types
 
 export type PartialRecord<K extends keyof any, T> = Partial<Record<K, T>>;
 
+type Mutable<T> = {
+  -readonly [P in keyof T]: T[P];
+};
+
+/**
+ * Validation attributes built-in to the browser
+ */
 interface InputValidations {
   required?: boolean;
   minLength?: number;
@@ -21,47 +21,52 @@ interface InputValidations {
   pattern?: string;
 }
 
+/**
+ * An HTML validation attribute that can be placed on an input
+ */
+export type ValidationAttribute =
+  | "required"
+  | "minLength"
+  | "maxLength"
+  | "min"
+  | "max"
+  | "pattern";
+
+/**
+ * Custom validation function
+ */
 interface CustomValidation {
   (val: string, attrValue?: string): boolean | Promise<boolean>;
 }
 
 /**
- * An HTML validation attribute that can be placed on an input
+ * Union type for both built-in and custom validations
  */
-export type ValidationAttribute = keyof InputValidations;
+type Validations =
+  | {
+      [thing in ValidationAttribute]?: InputValidations[thing];
+    }
+  | Record<string, CustomValidation>;
 
-interface InternalValidityState {
-  badInput: boolean;
-  customError: boolean;
-  rangeOverflow: boolean;
-  rangeUnderflow: boolean;
-  patternMismatch: boolean;
-  stepMismatch: boolean;
-  tooLong: boolean;
-  tooShort: boolean;
-  typeMismatch: boolean;
-  valueMissing: boolean;
-  valid: boolean;
-}
+/**
+ * Mutable version of ValidityState that we can write to
+ */
+type MutableValidityState = Mutable<ValidityState>;
+
+/**
+ * Extended ValidityState which weill also contain our custom validations
+ */
+type ExtendedValidityState = MutableValidityState & Record<string, boolean>;
 
 /**
  * The DOM ValidityState key representing a validation error
  */
-export type ValidityStateKey = keyof InternalValidityState;
+export type ValidityStateKey = keyof ValidityState;
 
 /**
  * Map of inputName -> HTML validations for the input
  */
-export type FormValidations = Record<string, InputValidations>;
-export type CustomValidations = Record<
-  string,
-  Record<string, CustomValidation>
->;
-
-interface InputValidationResult {
-  validityState: InternalValidityState;
-  customValidityState?: Record<string, boolean>;
-}
+export type FormValidations = Record<string, Validations>;
 
 /**
  * Form level InputInfo
@@ -75,8 +80,7 @@ export interface InputInfo {
   touched: boolean;
   dirty: boolean;
   state: "idle" | "validating" | "done";
-  validityState?: InputValidationResult["validityState"];
-  customValidityState?: InputValidationResult["customValidityState"];
+  validity?: ExtendedValidityState;
 }
 
 // Server-side only (currently) - validate all specified inputs in the formData
@@ -91,11 +95,8 @@ interface Validator {
   validate(value: string, attrValue: string): boolean;
 }
 
-type Validators = Record<ValidationAttribute, Validator>;
-
 interface FormContextObject {
   formValidations: FormValidations;
-  customValidations?: CustomValidations;
   errorMessages?: ErrorMessages;
   serverFormInfo?: ServerFormInfo;
   requiredNotation?: string;
@@ -107,7 +108,7 @@ interface FormContextObject {
 //#region Constants + Utils
 
 // Browser built-in validations
-const builtInValidations: Validators = {
+const builtInValidations: Record<ValidationAttribute, Validator> = {
   required: {
     domKey: "valueMissing",
     validate: (value: string, attrValue: string): boolean => value.length > 0,
@@ -152,7 +153,7 @@ function invariant(value: any, message?: string) {
   }
 }
 
-function getBaseValidityState(): InternalValidityState {
+function getBaseValidityState(): ExtendedValidityState {
   return {
     badInput: false,
     customError: false,
@@ -173,49 +174,37 @@ function getBaseValidityState(): InternalValidityState {
 async function validateInput(
   inputEl: HTMLInputElement | null,
   value: string,
-  inputValidations: InputValidations,
-  customValidations?: Record<string, CustomValidation>
-): Promise<InputValidationResult> {
-  const validityState = getBaseValidityState();
-  Object.entries(inputValidations).forEach(([attr, attrValue]) => {
-    const { domKey, validate } =
-      builtInValidations[attr as ValidationAttribute];
-    let isInvalid =
-      inputEl?.validity?.[domKey] ?? !validate(value, String(attrValue));
-    validityState[domKey] = isInvalid;
-    validityState.valid = validityState.valid && !isInvalid;
-  });
-
-  if (!customValidations) {
-    return { validityState };
-  }
-
-  let customValidityState: Record<string, boolean> = {};
+  inputValidations: Validations
+): Promise<ExtendedValidityState> {
+  let validity = getBaseValidityState();
   await Promise.all(
-    Object.entries(customValidations).map(
-      async ([validationName, validation]) => {
-        try {
-          let isValid = await validation(value);
-          customValidityState[validationName] = !isValid;
-          validityState.valid = validityState.valid && isValid;
-        } catch (e) {
-          console.error("Caught error during async validation!", e);
-        }
+    Object.entries(inputValidations).map(async (e) => {
+      let attr = e[0];
+      let attrValue = e[1];
+      // FIXME:
+      //@ts-ignore
+      const builtInValidation: Validator = builtInValidations[attr];
+      let isInvalid = false;
+      if (builtInValidation) {
+        isInvalid = inputEl?.validity
+          ? inputEl?.validity[builtInValidation.domKey]
+          : !builtInValidation.validate(value, String(attrValue));
+      } else if (typeof attrValue === "function") {
+        isInvalid = !(await attrValue(value));
+      } else {
+        console.error(`No validation completed for ${attr}`);
       }
-    )
+      validity[builtInValidation?.domKey || attr] = isInvalid;
+      validity.valid = validity.valid && !isInvalid;
+    })
   );
-
-  return {
-    validityState,
-    customValidityState,
-  };
+  return validity;
 }
 
 // Perform all specified custom validations for a single input
 export async function validateServerFormData(
   formData: FormData,
-  formValidations: FormValidations,
-  customValidations?: CustomValidations
+  formValidations: FormValidations
 ): Promise<ServerFormInfo> {
   // Echo back submitted form data for input pre-population
   const submittedFormData = Array.from(formData.entries()).reduce(
@@ -228,25 +217,15 @@ export async function validateServerFormData(
     Object.entries(formValidations).map(async ([name, inputValidations]) => {
       const value = formData.get(name);
       if (typeof value === "string") {
-        let { validityState, customValidityState } = await validateInput(
-          null,
-          value,
-          inputValidations,
-          customValidations?.[name]
-        );
+        let validity = await validateInput(null, value, inputValidations);
         // Always assume inputs have been modified during SSR validation
         inputs[name] = {
           touched: true,
           dirty: true,
           state: "done",
-          validityState,
-          customValidityState,
+          validity,
         };
-        valid =
-          valid &&
-          validityState.valid &&
-          (!customValidityState ||
-            !Object.values(customValidityState).some(Boolean));
+        valid = valid && validity.valid;
       }
     })
   );
@@ -283,12 +262,10 @@ let callAll =
 export function useValidatedInput({
   name,
   formValidations,
-  customValidations,
   serverFormInfo,
 }: {
   name: string;
   formValidations: FormValidations;
-  customValidations?: CustomValidations;
   serverFormInfo?: ServerFormInfo;
 }) {
   let wasSubmitted = serverFormInfo != null;
@@ -299,19 +276,31 @@ export function useValidatedInput({
   let [validationState, setValidationState] = useState<InputInfo["state"]>(
     wasSubmitted ? "done" : "idle"
   );
-  let [validityState, setValidityState] = useState<
-    InputInfo["validityState"] | undefined
-  >(serverFormInfo?.inputs?.[name]?.validityState);
-  let [customValidityState, setCustomValidityState] = useState<
-    InputInfo["customValidityState"] | undefined
-  >(serverFormInfo?.inputs?.[name].customValidityState);
+  let [validity, setValidity] = useState<InputInfo["validity"] | undefined>(
+    serverFormInfo?.inputs?.[name]?.validity
+  );
   let controller = useRef<AbortController | null>(null);
 
   useOneTimeListener(inputRef, "blur", () => setTouched(true));
 
+  //FIXME: Still have a small flicker with this dual effect approach
+
+  // Trigger validation from value changes
+  useEffect(() => {
+    // If we heard back from the server, consider us validated and mark
+    // dirty/touched to show errors
+    if (serverFormInfo) {
+      setDirty(true);
+      setTouched(true);
+      setValidationState("done");
+      setValidity(serverFormInfo.inputs[name].validity);
+    }
+  }, [serverFormInfo]);
+
   // Trigger validation from value changes
   useEffect(() => {
     if (dirty || touched) {
+      // Otherwise start validation if we're dirty/touched
       setValidationState("validating");
     }
   }, [value, dirty, touched]);
@@ -326,24 +315,18 @@ export function useValidatedInput({
       }
       let localController = new AbortController();
       controller.current = localController;
-      const validationAttrs = Object.entries(formValidations[name] || {})
-        .filter(([attr]) => attr in builtInValidations)
-        .reduce(
-          (acc, [attr, attrValue]) => Object.assign(acc, { [attr]: attrValue }),
-          {}
-        );
-      const { validityState, customValidityState } = await validateInput(
+      console.log("calling validateInpout", name);
+      const validity = await validateInput(
         inputRef.current,
         value,
-        validationAttrs,
-        customValidations?.[name]
+        formValidations[name]
       );
+      console.log("done calling validateInpout", name);
       if (localController.signal.aborted) {
         return;
       }
       setValidationState("done");
-      setValidityState(validityState);
-      setCustomValidityState(customValidityState);
+      setValidity(validity);
     }
     go().catch((e) =>
       console.error("Caught error in validateInput useEffect", e)
@@ -354,16 +337,23 @@ export function useValidatedInput({
     onChange,
     ...attrs
   }: React.ComponentPropsWithoutRef<"input"> = {}) {
+    let validationAttrs = Object.entries(formValidations[name]).reduce(
+      (acc, [attr, value]) =>
+        attr in builtInValidations
+          ? Object.assign(acc, { [attr]: value })
+          : acc,
+      {}
+    );
     return {
       ref: inputRef,
       name,
-      "aria-invalid": validityState?.valid === false,
+      "aria-invalid": validity?.valid === false,
       // TODO: aria-described-by?
       onChange: callAll(onChange, (e: React.ChangeEvent<HTMLInputElement>) => {
         setDirty(true);
         setValue(e.target.value);
       }),
-      ...formValidations[name],
+      ...validationAttrs,
       ...attrs,
     };
   }
@@ -373,8 +363,7 @@ export function useValidatedInput({
       dirty,
       touched,
       state: validationState,
-      validityState,
-      customValidityState,
+      validity,
     } as InputInfo,
     controller,
     getInputAttrs,
@@ -384,37 +373,25 @@ export function useValidatedInput({
 export interface InputProps extends React.ComponentPropsWithoutRef<"input"> {
   name: string;
   formValidations: FormValidations;
-  customValidations?: CustomValidations;
 }
 
 // Wrapper around <input> to handle syncing with ValidityState
 // TODO: add forwardRef
-function Input({
-  name,
-  formValidations,
-  customValidations,
-  ...attrs
-}: InputProps) {
+function Input({ name, formValidations, ...attrs }: InputProps) {
   let { getInputAttrs } = useValidatedInput({
     name,
     formValidations,
-    customValidations,
   });
   return <input {...getInputAttrs(attrs)} />;
 }
 
 export interface ErrorProps {
-  validityState: InputInfo["validityState"];
-  customValidityState: InputInfo["customValidityState"];
+  validity: InputInfo["validity"];
   messages?: ErrorMessages;
 }
 
 // Display errors for a given input
-export function Errors({
-  validityState,
-  customValidityState,
-  messages,
-}: ErrorProps) {
+export function Errors({ validity, messages }: ErrorProps) {
   const errorMessages: ErrorMessages = {
     valueMissing: "Field is required",
     tooShort: "Value must be at least N characters",
@@ -426,7 +403,7 @@ export function Errors({
   };
   return (
     <ul style={{ color: "red" }}>
-      {Object.entries({ ...validityState, ...customValidityState })
+      {Object.entries(validity || {})
         .filter((e) => e[0] !== "valid" && e[1])
         .map(([validation]) => (
           <li key={validation}>🆘 {errorMessages[validation]}</li>
@@ -449,21 +426,16 @@ export function Field(props: FieldProps) {
   let { info, getInputAttrs } = useValidatedInput({
     name: props.name,
     formValidations: ctx.formValidations,
-    customValidations: ctx.customValidations,
     serverFormInfo: ctx.serverFormInfo,
   });
 
   let validationDisplay = {
     idle: null,
     validating: <p>Validating...</p>,
-    done: info.validityState?.valid ? (
+    done: info.validity?.valid ? (
       <p>✅</p>
     ) : (
-      <Errors
-        messages={ctx.errorMessages}
-        validityState={info.validityState}
-        customValidityState={info.customValidityState}
-      />
+      <Errors messages={ctx.errorMessages} validity={info.validity} />
     ),
   };
   return (

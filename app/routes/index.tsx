@@ -1,11 +1,7 @@
 import * as React from "react";
 import { ActionFunction, Form, json, redirect, useActionData } from "remix";
 
-import type {
-  CustomValidations,
-  FormValidations,
-  ServerFormInfo,
-} from "~/remix-enhanced-forms";
+import type { FormValidations, ServerFormInfo } from "~/remix-enhanced-forms";
 import {
   Debug,
   ErrorMessages,
@@ -24,6 +20,9 @@ type ActionData = {
 const formValidations: FormValidations = {
   firstName: {
     required: true,
+    mustBeMatt(value) {
+      return value.toLowerCase() === "matt";
+    },
   },
   middleInitial: {
     pattern: "^[a-zA-Z]{1}$",
@@ -31,41 +30,33 @@ const formValidations: FormValidations = {
   lastName: {
     required: true,
     minLength: 5,
+    async mustBeBrophy(value) {
+      console.log("sleeping");
+      await new Promise((r) => setTimeout(r, 1000));
+      console.log("done sleeping");
+      return !value || value.toLowerCase() === "brophy";
+    },
   },
 };
 
-// TODO: Inline with the above and use types detection?
-//  - Reserved attrs are built-in
-//  - Functions are automatically custom
-//  - Disambiguate string for fetcher?
-const customValidations: CustomValidations = {
-  firstName: {
-    mustBeMatt(value) {
-      return value.toLowerCase() === "matt";
-    },
-  },
-  lastName: {
-    async mustBeBrophy(value) {
-      await new Promise((r) => setTimeout(r, 1000));
-      return value.toLowerCase() === "brophy";
-    },
-  },
-  /**
-   * TODO: Async validation notes
-   *  - potentially make an array to control order of validations
-   *  - In Remix - async validations can be driven by useFetcher
-   *    - Expose fetcher transition on InputInfo
-   *    - Expose an aggregate "transition" on FormInfo
-   *    - validate: (value, attrValue): Promise<boolean>
-   *      validate: '.',             // Validate using a fetcher against the current route
-   *      validate: 'path/to/route', //  validate using a fetcher against another route
-   *      validate: 'https://...',   // validate using a fetcher against an external service?
-   *    - Provide some form of utility for easy single-field validation in your action
-   *    - In React Router
-   *       - Might not be a fetcher - just an async function - so use RR equivalent
-   *         of useFetcher - useAsyncThing or whatever
-   */
-};
+// TODO: Can we expose form-level `valid` field somewhere in client?
+// We currently only get it back from the server
+
+/**
+ * TODO: Async validation notes
+ *  - potentially make an array to control order of validations
+ *  - In Remix - async validations can be driven by useFetcher
+ *    - Expose fetcher transition on InputInfo
+ *    - Expose an aggregate "transition" on FormInfo
+ *    - validate: (value, attrValue): Promise<boolean>
+ *      validate: '.',             // Validate using a fetcher against the current route
+ *      validate: 'path/to/route', //  validate using a fetcher against another route
+ *      validate: 'https://...',   // validate using a fetcher against an external service?
+ *    - Provide some form of utility for easy single-field validation in your action
+ *    - In React Router
+ *       - Might not be a fetcher - just an async function - so use RR equivalent
+ *         of useFetcher - useAsyncThing or whatever
+ */
 
 const errorMessages: ErrorMessages = {
   valueMissing: "Hey, yo, this field is required!",
@@ -79,8 +70,7 @@ export const action: ActionFunction = async ({ request }) => {
   // Validate server-side using the same validations specified in the <input>
   const serverFormInfo = await validateServerFormData(
     formData,
-    formValidations,
-    customValidations
+    formValidations
   );
   if (!serverFormInfo.valid) {
     return json<ActionData>({ serverFormInfo });
@@ -97,7 +87,6 @@ export function LastNameInput({ serverFormInfo, debug }: LastNameInputProps) {
   let { info, getInputAttrs } = useValidatedInput({
     name: "lastName",
     formValidations: formValidations,
-    customValidations: customValidations,
     serverFormInfo,
   });
 
@@ -115,9 +104,9 @@ export function LastNameInput({ serverFormInfo, debug }: LastNameInputProps) {
       {info.touched &&
         (info.state === "validating" ? (
           <p>Validating...</p>
-        ) : info.validityState?.valid ? (
+        ) : info.validity?.valid ? (
           <p>✅</p>
-        ) : !info.validityState?.valid ? (
+        ) : !info.validity?.valid ? (
           <p>Something's wrong, but I ain't gonna tell ya what!</p>
         ) : null)}
 
@@ -159,7 +148,6 @@ export default function Index() {
       <FormContext.Provider
         value={{
           formValidations,
-          customValidations,
           errorMessages,
           requiredNotation: "*",
           serverFormInfo: actionData?.serverFormInfo,
