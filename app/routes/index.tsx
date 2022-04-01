@@ -3,13 +3,15 @@ import { ActionFunction, Form, json, redirect, useActionData } from "remix";
 
 import type {
   CustomValidations,
-  ErrorMessages,
   FormValidations,
   ServerFormInfo,
 } from "~/remix-enhanced-forms";
 import {
+  Debug,
+  ErrorMessages,
   FormContext,
   Field,
+  useValidatedInput,
   validateServerFormData,
 } from "~/remix-enhanced-forms";
 
@@ -86,6 +88,51 @@ export const action: ActionFunction = async ({ request }) => {
   return redirect("/");
 };
 
+interface LastNameInputProps {
+  serverFormInfo?: ServerFormInfo;
+  debug?: boolean;
+}
+
+export function LastNameInput({ serverFormInfo, debug }: LastNameInputProps) {
+  let { info, getInputAttrs } = useValidatedInput({
+    name: "lastName",
+    formValidations: formValidations,
+    customValidations: customValidations,
+    serverFormInfo,
+  });
+
+  return (
+    <div>
+      <label htmlFor={"lastName"}>Last Name*</label>
+      <br />
+      <input
+        {...getInputAttrs({
+          defaultValue: serverFormInfo?.submittedFormData?.lastName,
+        })}
+      />
+
+      {/* Display validation state */}
+      {info.touched &&
+        (info.state === "validating" ? (
+          <p>Validating...</p>
+        ) : info.validityState?.valid ? (
+          <p>✅</p>
+        ) : !info.validityState?.valid ? (
+          <p>Something's wrong, but I ain't gonna tell ya what!</p>
+        ) : null)}
+
+      {debug && (
+        <Debug
+          name="lastName"
+          info={info}
+          formValidations={formValidations}
+          serverFormInfo={serverFormInfo}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function Index() {
   let actionData = useActionData<ActionData>();
   let formRef = React.useRef<HTMLFormElement>(null);
@@ -128,11 +175,16 @@ export default function Index() {
             gridTemplateColumns: "repeat(4, 1fr)",
           }}
         >
+          {/* Least UI control */}
           <Field name="firstName" label="First Name" />
 
           <Field name="middleInitial" label="Middle Initial" />
 
-          <Field name="lastName" label="Last Name" />
+          {/* Most UI control */}
+          <LastNameInput
+            serverFormInfo={actionData?.serverFormInfo}
+            debug={debug}
+          />
 
           <div>
             <button type="submit">Submit</button>

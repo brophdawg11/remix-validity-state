@@ -1,5 +1,11 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { ActionFunction, Form, json, LoaderFunction, redirect } from "remix";
+import {
+  createContext,
+  FormEvent,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 ////////////////////////////////////////////////////////////////////////////////
 //#region Types
@@ -146,7 +152,7 @@ function invariant(value: any, message?: string) {
   }
 }
 
-export function getBaseValidityState(): InternalValidityState {
+function getBaseValidityState(): InternalValidityState {
   return {
     badInput: false,
     customError: false,
@@ -228,7 +234,6 @@ export async function validateServerFormData(
           inputValidations,
           customValidations?.[name]
         );
-        console.log("customValidityState", customValidityState);
         // Always assume inputs have been modified during SSR validation
         inputs[name] = {
           touched: true,
@@ -250,43 +255,70 @@ export async function validateServerFormData(
 //#endregion
 
 ////////////////////////////////////////////////////////////////////////////////
-//#region Components
+//#region Components + Hooks
 
-export interface InputProps extends React.ComponentPropsWithoutRef<"input"> {
-  initialValue: string | undefined;
-  customValidations?: Record<string, CustomValidation>;
-  onUpdate?: (info: InputInfo) => void;
+function useOneTimeListener(
+  ref: React.RefObject<HTMLElement>,
+  event: string,
+  cb: () => void
+) {
+  function onEvent() {
+    cb();
+    unlisten();
+  }
+  function unlisten() {
+    ref.current?.removeEventListener(event, onEvent);
+  }
+  useEffect(() => {
+    ref.current?.addEventListener(event, onEvent, { once: true });
+    return unlisten;
+  }, [ref]);
 }
 
-// Wrapper around <input> to handle syncing with ValidityState
-// TODO: add forwardRef
-export function Input(props: InputProps) {
-  const { onUpdate, initialValue, customValidations, ...inputAttrs } = props;
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [value, setValue] = useState(initialValue || "");
-  const controller = useRef<AbortController | null>(null);
-  const [dirty, setDirty] = useState(false);
-  const [touched, setTouched] = useState(false);
+let callAll =
+  (...fns: (Function | undefined)[]) =>
+  (...args: any[]) =>
+    fns.forEach((fn) => fn?.(...args));
 
-  let setTouchedWrapper = () => {
-    setTouched(true);
-    inputRef.current?.removeEventListener("blur", setTouchedWrapper);
-  };
+export function useValidatedInput({
+  name,
+  formValidations,
+  customValidations,
+  serverFormInfo,
+}: {
+  name: string;
+  formValidations: FormValidations;
+  customValidations?: CustomValidations;
+  serverFormInfo?: ServerFormInfo;
+}) {
+  let wasSubmitted = serverFormInfo != null;
+  let inputRef = useRef<HTMLInputElement>(null);
+  let [value, setValue] = useState("");
+  let [dirty, setDirty] = useState<boolean>(wasSubmitted);
+  let [touched, setTouched] = useState<boolean>(wasSubmitted);
+  let [validationState, setValidationState] = useState<InputInfo["state"]>(
+    wasSubmitted ? "done" : "idle"
+  );
+  let [validityState, setValidityState] = useState<
+    InputInfo["validityState"] | undefined
+  >(serverFormInfo?.inputs?.[name]?.validityState);
+  let [customValidityState, setCustomValidityState] = useState<
+    InputInfo["customValidityState"] | undefined
+  >(serverFormInfo?.inputs?.[name].customValidityState);
+  let controller = useRef<AbortController | null>(null);
+
+  useOneTimeListener(inputRef, "blur", () => setTouched(true));
+
+  // Trigger validation from value changes
   useEffect(() => {
-    inputRef.current?.addEventListener("blur", setTouchedWrapper);
-    return () =>
-      inputRef.current?.removeEventListener("blur", setTouchedWrapper);
-  }, []);
+    if (dirty || touched) {
+      setValidationState("validating");
+    }
+  }, [value, dirty, touched]);
 
-  let inputAttrsDep = JSON.stringify(inputAttrs);
   useEffect(() => {
     async function go() {
-      if (!dirty && !touched) {
-        onUpdate?.({
-          touched,
-          dirty,
-          state: "idle",
-        });
+      if (validationState !== "validating") {
         return;
       }
       if (controller.current) {
@@ -294,12 +326,7 @@ export function Input(props: InputProps) {
       }
       let localController = new AbortController();
       controller.current = localController;
-      onUpdate?.({
-        touched,
-        dirty,
-        state: "validating",
-      });
-      const validationAttrs = Object.entries(inputAttrs)
+      const validationAttrs = Object.entries(formValidations[name] || {})
         .filter(([attr]) => attr in builtInValidations)
         .reduce(
           (acc, [attr, attrValue]) => Object.assign(acc, { [attr]: attrValue }),
@@ -309,33 +336,71 @@ export function Input(props: InputProps) {
         inputRef.current,
         value,
         validationAttrs,
-        props.customValidations
+        customValidations?.[name]
       );
       if (localController.signal.aborted) {
         return;
       }
-      onUpdate?.({
-        touched,
-        dirty,
-        state: "done",
-        validityState,
-        customValidityState,
-      });
+      setValidationState("done");
+      setValidityState(validityState);
+      setCustomValidityState(customValidityState);
     }
-    go().catch((e) => console.error("Caught error in validateInput useEffect"));
-  }, [inputAttrsDep, value, inputRef, touched, dirty, controller]);
+    go().catch((e) =>
+      console.error("Caught error in validateInput useEffect", e)
+    );
+  }, [value, validationState, inputRef.current]);
 
-  return (
-    <input
-      ref={inputRef}
-      value={value}
-      onChange={(e) => {
+  function getInputAttrs({
+    onChange,
+    ...attrs
+  }: React.ComponentPropsWithoutRef<"input"> = {}) {
+    return {
+      ref: inputRef,
+      name,
+      "aria-invalid": validityState?.valid === false,
+      // TODO: aria-described-by?
+      onChange: callAll(onChange, (e: React.ChangeEvent<HTMLInputElement>) => {
         setDirty(true);
         setValue(e.target.value);
-      }}
-      {...inputAttrs}
-    />
-  );
+      }),
+      ...formValidations[name],
+      ...attrs,
+    };
+  }
+
+  return {
+    info: {
+      dirty,
+      touched,
+      state: validationState,
+      validityState,
+      customValidityState,
+    } as InputInfo,
+    controller,
+    getInputAttrs,
+  };
+}
+
+export interface InputProps extends React.ComponentPropsWithoutRef<"input"> {
+  name: string;
+  formValidations: FormValidations;
+  customValidations?: CustomValidations;
+}
+
+// Wrapper around <input> to handle syncing with ValidityState
+// TODO: add forwardRef
+function Input({
+  name,
+  formValidations,
+  customValidations,
+  ...attrs
+}: InputProps) {
+  let { getInputAttrs } = useValidatedInput({
+    name,
+    formValidations,
+    customValidations,
+  });
+  return <input {...getInputAttrs(attrs)} />;
 }
 
 export interface ErrorProps {
@@ -374,7 +439,6 @@ export interface FieldProps {
   name: string;
   label: string;
   debug?: boolean;
-  onUpdate?: (info: InputInfo) => void;
 }
 
 // Syntactic sugar component to handle <label>/<input> and error displays
@@ -382,36 +446,12 @@ export function Field(props: FieldProps) {
   let ctx = useContext(FormContext);
   invariant(ctx, "<Field> must be used inside a <FormContext.Provider>");
 
-  // Use the errors returned from the action if they exist
-  let wasSubmitted = ctx.serverFormInfo != null;
-  const [info, setInfo] = useState<InputInfo>({
-    // Assume touched/dirty if this is after a form submission
-    touched: wasSubmitted,
-    dirty: wasSubmitted,
-    state: wasSubmitted ? "done" : "idle",
-    validityState: ctx.serverFormInfo?.inputs?.[props.name]
-      ?.validityState as InternalValidityState,
-    customValidityState:
-      ctx.serverFormInfo?.inputs?.[props.name].customValidityState,
+  let { info, getInputAttrs } = useValidatedInput({
+    name: props.name,
+    formValidations: ctx.formValidations,
+    customValidations: ctx.customValidations,
+    serverFormInfo: ctx.serverFormInfo,
   });
-
-  useEffect(() => {
-    if (ctx?.serverFormInfo) {
-      setInfo({
-        ...info,
-        touched: true,
-        state: "done",
-        validityState: ctx.serverFormInfo?.inputs?.[props.name]
-          ?.validityState as InternalValidityState,
-        customValidityState:
-          ctx.serverFormInfo?.inputs?.[props.name].customValidityState,
-      });
-    }
-  }, [ctx.serverFormInfo]);
-
-  useEffect(() => {
-    props.onUpdate?.(info);
-  }, [info]);
 
   let validationDisplay = {
     idle: null,
@@ -435,17 +475,15 @@ export function Field(props: FieldProps) {
           : null}
       </label>
       <br />
-      <Input
-        id={props.name}
-        name={props.name}
-        initialValue={ctx.serverFormInfo?.submittedFormData?.[props.name]}
-        customValidations={ctx.customValidations?.[props.name]}
-        onUpdate={setInfo}
-        {...ctx.formValidations[props.name]}
+      <input
+        {...getInputAttrs({
+          defaultValue: ctx.serverFormInfo?.submittedFormData?.[props.name],
+        })}
       />
 
       {/* Display validation state */}
-      {(wasSubmitted || info.touched) && validationDisplay[info.state]}
+      {(ctx.serverFormInfo != null || info.touched) &&
+        validationDisplay[info.state]}
 
       {ctx?.debug && (
         <Debug
