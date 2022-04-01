@@ -15,13 +15,19 @@ type ActionData = {
   serverFormInfo: ServerFormInfo;
 };
 
-// Raw HTML validation attributes, to be spread directly onto <input>
+// Validations for our entire form, composed of raw HTML validation attributes
+// to be spread directly onto <input>, as well as custo validations that will
+// run both client and server side.
 // Specified in an object here so they can be leveraged for server-side validation
 const formValidations: FormValidations = {
   firstName: {
+    // Standard HTML validations have primitives as their value
     required: true,
+    maxLength: 15,
+    // Custom validations provide functions to validate.  Can be sync or async
+    // and must return a boolean
     mustBeMatt(value) {
-      return value.toLowerCase() === "matt";
+      return !value || value.toLowerCase() === "matt";
     },
   },
   middleInitial: {
@@ -30,35 +36,19 @@ const formValidations: FormValidations = {
   lastName: {
     required: true,
     minLength: 5,
+    // Custom validations can also be async
+    // TODO: In remix it would be nice to add some syntactic sugar to directly
+    // use a fetcher to validate against an action.  And expose the fetcher
+    // state as the validation state.  Also consider aggregating all validation
+    // states up to the form level to know if the form overall is idle or validating.
     async mustBeBrophy(value) {
-      console.log("sleeping");
       await new Promise((r) => setTimeout(r, 1000));
-      console.log("done sleeping");
       return !value || value.toLowerCase() === "brophy";
     },
   },
 };
 
-// TODO: Can we expose form-level `valid` field somewhere in client?
-// We currently only get it back from the server
-
-/**
- * TODO: Async validation notes
- *  - potentially make an array to control order of validations
- *  - In Remix - async validations can be driven by useFetcher
- *    - Expose fetcher transition on InputInfo
- *    - Expose an aggregate "transition" on FormInfo
- *    - validate: (value, attrValue): Promise<boolean>
- *      validate: '.',             // Validate using a fetcher against the current route
- *      validate: 'path/to/route', //  validate using a fetcher against another route
- *      validate: 'https://...',   // validate using a fetcher against an external service?
- *    - Provide some form of utility for easy single-field validation in your action
- *    - In React Router
- *       - Might not be a fetcher - just an async function - so use RR equivalent
- *         of useFetcher - useAsyncThing or whatever
- */
-
-const errorMessages: ErrorMessages = {
+const customErrorMessages: ErrorMessages = {
   valueMissing: "Hey, yo, this field is required!",
   mustBeMatt: "This field must have a value of 'matt'",
   mustBeBrophy: "This field must have a value of 'brophy'",
@@ -68,6 +58,10 @@ export const action: ActionFunction = async ({ request }) => {
   const formData = await request.formData();
 
   // Validate server-side using the same validations specified in the <input>
+  // TODO: Can we expose form-level `valid` field somewhere in client?
+  // We currently only get it back from the server on serverFormInfo.valid.  At
+  // the moment, client side the <form> doesn't really know about any of it's
+  // descendant inputs.  Maybe we can do a pub/sub through context?
   const serverFormInfo = await validateServerFormData(
     formData,
     formValidations
@@ -92,6 +86,7 @@ export function LastNameInput({ serverFormInfo, debug }: LastNameInputProps) {
 
   return (
     <div>
+      {/* TODO: add getLabelAttrs to useValidatedInput */}
       <label htmlFor={"lastName"}>Last Name*</label>
       <br />
       <input
@@ -101,6 +96,7 @@ export function LastNameInput({ serverFormInfo, debug }: LastNameInputProps) {
       />
 
       {/* Display validation state */}
+      {/* TODO: add getErrorAttrs to useValidatedInput */}
       {info.touched &&
         (info.state === "validating" ? (
           <p>Validating...</p>
@@ -148,7 +144,7 @@ export default function Index() {
       <FormContext.Provider
         value={{
           formValidations,
-          errorMessages,
+          errorMessages: customErrorMessages,
           requiredNotation: "*",
           serverFormInfo: actionData?.serverFormInfo,
           debug,
@@ -168,7 +164,7 @@ export default function Index() {
 
           <Field name="middleInitial" label="Middle Initial" />
 
-          {/* Most UI control */}
+          {/* Most UI control - see above */}
           <LastNameInput
             serverFormInfo={actionData?.serverFormInfo}
             debug={debug}

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import * as React from "react";
 
 ////////////////////////////////////////////////////////////////////////////////
 //#region Types
@@ -90,6 +90,10 @@ export type ServerFormInfo = {
   valid: boolean;
 };
 
+/**
+ * Validator to link HTML attribute to ValidityState key as well as provide an
+ * implementation for server side validation
+ */
 interface Validator {
   domKey: ValidityStateKey;
   validate(value: string, attrValue: string): boolean;
@@ -140,7 +144,7 @@ const builtInValidations: Record<ValidationAttribute, Validator> = {
   },
 };
 
-export const FormContext = createContext<FormContextObject | null>(null);
+export const FormContext = React.createContext<FormContextObject | null>(null);
 
 function invariant(value: boolean, message?: string): asserts value;
 function invariant<T>(
@@ -241,17 +245,18 @@ function useOneTimeListener(
   event: string,
   cb: () => void
 ) {
-  function onEvent() {
+  let unlisten: (() => void) | null = null;
+  let onEvent = React.useCallback(() => {
     cb();
-    unlisten();
-  }
-  function unlisten() {
+    unlisten?.();
+  }, [cb, unlisten]);
+  unlisten = React.useCallback<() => void>(() => {
     ref.current?.removeEventListener(event, onEvent);
-  }
-  useEffect(() => {
+  }, [event, onEvent, ref]);
+  React.useEffect(() => {
     ref.current?.addEventListener(event, onEvent, { once: true });
-    return unlisten;
-  }, [ref]);
+    return unlisten || (() => {});
+  }, [event, onEvent, ref, unlisten]);
 }
 
 let callAll =
@@ -269,24 +274,24 @@ export function useValidatedInput({
   serverFormInfo?: ServerFormInfo;
 }) {
   let wasSubmitted = serverFormInfo != null;
-  let inputRef = useRef<HTMLInputElement>(null);
-  let [value, setValue] = useState("");
-  let [dirty, setDirty] = useState<boolean>(wasSubmitted);
-  let [touched, setTouched] = useState<boolean>(wasSubmitted);
-  let [validationState, setValidationState] = useState<InputInfo["state"]>(
-    wasSubmitted ? "done" : "idle"
-  );
-  let [validity, setValidity] = useState<InputInfo["validity"] | undefined>(
-    serverFormInfo?.inputs?.[name]?.validity
-  );
-  let controller = useRef<AbortController | null>(null);
+  let inputRef = React.useRef<HTMLInputElement>(null);
+  let [value, setValue] = React.useState("");
+  let [dirty, setDirty] = React.useState<boolean>(wasSubmitted);
+  let [touched, setTouched] = React.useState<boolean>(wasSubmitted);
+  let [validationState, setValidationState] = React.useState<
+    InputInfo["state"]
+  >(wasSubmitted ? "done" : "idle");
+  let [validity, setValidity] = React.useState<
+    InputInfo["validity"] | undefined
+  >(serverFormInfo?.inputs?.[name]?.validity);
+  let controller = React.useRef<AbortController | null>(null);
 
   useOneTimeListener(inputRef, "blur", () => setTouched(true));
 
   //FIXME: Still have a small flicker with this dual effect approach
 
   // Trigger validation from value changes
-  useEffect(() => {
+  React.useEffect(() => {
     // If we heard back from the server, consider us validated and mark
     // dirty/touched to show errors
     if (serverFormInfo) {
@@ -295,17 +300,17 @@ export function useValidatedInput({
       setValidationState("done");
       setValidity(serverFormInfo.inputs[name].validity);
     }
-  }, [serverFormInfo]);
+  }, [name, serverFormInfo]);
 
   // Trigger validation from value changes
-  useEffect(() => {
+  React.useEffect(() => {
     if (dirty || touched) {
       // Otherwise start validation if we're dirty/touched
       setValidationState("validating");
     }
   }, [value, dirty, touched]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     async function go() {
       if (validationState !== "validating") {
         return;
@@ -315,13 +320,11 @@ export function useValidatedInput({
       }
       let localController = new AbortController();
       controller.current = localController;
-      console.log("calling validateInpout", name);
       const validity = await validateInput(
         inputRef.current,
         value,
         formValidations[name]
       );
-      console.log("done calling validateInpout", name);
       if (localController.signal.aborted) {
         return;
       }
@@ -331,7 +334,7 @@ export function useValidatedInput({
     go().catch((e) =>
       console.error("Caught error in validateInput useEffect", e)
     );
-  }, [value, validationState, inputRef.current]);
+  }, [value, validationState, formValidations, name]);
 
   function getInputAttrs({
     onChange,
@@ -370,21 +373,6 @@ export function useValidatedInput({
   };
 }
 
-export interface InputProps extends React.ComponentPropsWithoutRef<"input"> {
-  name: string;
-  formValidations: FormValidations;
-}
-
-// Wrapper around <input> to handle syncing with ValidityState
-// TODO: add forwardRef
-function Input({ name, formValidations, ...attrs }: InputProps) {
-  let { getInputAttrs } = useValidatedInput({
-    name,
-    formValidations,
-  });
-  return <input {...getInputAttrs(attrs)} />;
-}
-
 export interface ErrorProps {
   validity: InputInfo["validity"];
   messages?: ErrorMessages;
@@ -420,7 +408,7 @@ export interface FieldProps {
 
 // Syntactic sugar component to handle <label>/<input> and error displays
 export function Field(props: FieldProps) {
-  let ctx = useContext(FormContext);
+  let ctx = React.useContext(FormContext);
   invariant(ctx, "<Field> must be used inside a <FormContext.Provider>");
 
   let { info, getInputAttrs } = useValidatedInput({

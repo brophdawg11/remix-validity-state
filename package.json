@@ -5,16 +5,20 @@
   "license": "",
   "dependencies": {
     "@remix-run/react": "^1.2.1",
+    "@remix-run/serve": "^1.2.1",
     "react": "^17.0.2",
     "react-dom": "^17.0.2",
-    "remix": "^1.2.1",
-    "@remix-run/serve": "^1.2.1",
-    "cross-env": "^7.0.3"
+    "remix": "^1.2.1"
   },
   "devDependencies": {
     "@remix-run/dev": "^1.2.1",
+    "@remix-run/eslint-config": "1.3.4",
+    "@types/eslint": "8.4.1",
     "@types/react": "^17.0.24",
     "@types/react-dom": "^17.0.9",
+    "eslint": "8.12.0",
+    "eslint-config-prettier": "8.5.0",
+    "prettier": "2.6.1",
     "typescript": "^4.1.2"
   },
   "engines": {
@@ -22,9 +26,10 @@
   },
   "sideEffects": false,
   "scripts": {
+    "build": "NODE_ENV=production remix build",
+    "dev": "NODE_ENV=development remix dev",
+    "lint": "eslint --ext .js,.ts,.tsx .",
     "postinstall": "remix setup node",
-    "build": "cross-env NODE_ENV=production remix build",
-    "dev": "cross-env NODE_ENV=development remix dev",
-    "start": "cross-env NODE_ENV=production remix-serve build"
+    "start": "NODE_ENV=production remix-serve build"
   }
 }
