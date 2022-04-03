@@ -1,4 +1,4 @@
-import { LiveReload, Outlet, Scripts } from "remix";
+import { LiveReload, Outlet, Scripts } from "@remix-run/react";
 
 export default function App() {
   return (

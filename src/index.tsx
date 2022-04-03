@@ -157,6 +157,10 @@ function invariant(value: any, message?: string) {
   }
 }
 
+function isPromise(p: any) {
+  return p instanceof Promise;
+}
+
 function getBaseValidityState(): ExtendedValidityState {
   return {
     badInput: false,
