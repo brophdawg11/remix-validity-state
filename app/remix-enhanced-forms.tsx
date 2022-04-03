@@ -266,13 +266,23 @@ let callAll =
 
 export function useValidatedInput({
   name,
-  formValidations,
-  serverFormInfo,
+  formValidations: formValidationsProp,
+  serverFormInfo: serverFormInfoProp,
 }: {
   name: string;
-  formValidations: FormValidations;
+  formValidations?: FormValidations;
   serverFormInfo?: ServerFormInfo;
 }) {
+  let ctx = React.useContext(FormContext);
+  let formValidations = formValidationsProp || ctx?.formValidations;
+  let serverFormInfo = serverFormInfoProp || ctx?.serverFormInfo;
+
+  invariant(
+    formValidations !== undefined,
+    "useValidatedInput() must either be used inside a <FormContext.Provider> " +
+      "or be passed a formValidations prop"
+  );
+
   let wasSubmitted = serverFormInfo != null;
   let inputRef = React.useRef<HTMLInputElement>(null);
   let [value, setValue] = React.useState("");
@@ -312,7 +322,7 @@ export function useValidatedInput({
 
   React.useEffect(() => {
     async function go() {
-      if (validationState !== "validating") {
+      if (validationState !== "validating" || !formValidations) {
         return;
       }
       if (controller.current) {
@@ -340,7 +350,7 @@ export function useValidatedInput({
     onChange,
     ...attrs
   }: React.ComponentPropsWithoutRef<"input"> = {}) {
-    let validationAttrs = Object.entries(formValidations[name]).reduce(
+    let validationAttrs = Object.entries(formValidations?.[name] || {}).reduce(
       (acc, [attr, value]) =>
         attr in builtInValidations
           ? Object.assign(acc, { [attr]: value })
@@ -403,20 +413,14 @@ export function Errors({ validity, messages }: ErrorProps) {
 export interface FieldProps {
   name: string;
   label: string;
-  debug?: boolean;
 }
 
 // Syntactic sugar component to handle <label>/<input> and error displays
-export function Field(props: FieldProps) {
+export function Field({ name, label }: FieldProps) {
   let ctx = React.useContext(FormContext);
   invariant(ctx, "<Field> must be used inside a <FormContext.Provider>");
 
-  let { info, getInputAttrs } = useValidatedInput({
-    name: props.name,
-    formValidations: ctx.formValidations,
-    serverFormInfo: ctx.serverFormInfo,
-  });
-
+  let { info, getInputAttrs } = useValidatedInput({ name });
   let validationDisplay = {
     idle: null,
     validating: <p>Validating...</p>,
@@ -428,16 +432,16 @@ export function Field(props: FieldProps) {
   };
   return (
     <div>
-      <label htmlFor={props.name}>
-        {props.label}
-        {ctx.requiredNotation && ctx.formValidations[props.name].required
+      <label htmlFor={name}>
+        {label}
+        {ctx.requiredNotation && ctx.formValidations[name].required
           ? ctx.requiredNotation
           : null}
       </label>
       <br />
       <input
         {...getInputAttrs({
-          defaultValue: ctx.serverFormInfo?.submittedFormData?.[props.name],
+          defaultValue: ctx.serverFormInfo?.submittedFormData?.[name],
         })}
       />
 
@@ -447,7 +451,7 @@ export function Field(props: FieldProps) {
 
       {ctx?.debug && (
         <Debug
-          name={props.name}
+          name={name}
           info={info}
           formValidations={ctx.formValidations}
           serverFormInfo={ctx.serverFormInfo}

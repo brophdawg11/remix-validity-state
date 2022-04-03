@@ -78,11 +78,7 @@ interface LastNameInputProps {
 }
 
 export function LastNameInput({ serverFormInfo, debug }: LastNameInputProps) {
-  let { info, getInputAttrs } = useValidatedInput({
-    name: "lastName",
-    formValidations: formValidations,
-    serverFormInfo,
-  });
+  let { info, getInputAttrs } = useValidatedInput({ name: "lastName" });
 
   return (
     <div>
