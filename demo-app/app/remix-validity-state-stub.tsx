@@ -186,7 +186,7 @@ async function validateInput(
 ): Promise<ExtendedValidityState> {
   let validity = getBaseValidityState();
   await Promise.all(
-    Object.entries(inputValidations).map(async (e) => {
+    Object.entries(inputValidations || {}).map(async (e) => {
       let attr = e[0];
       let attrValue = e[1];
       // FIXME:
@@ -302,8 +302,6 @@ export function useValidatedInput({
 
   useOneTimeListener(inputRef, "blur", () => setTouched(true));
 
-  //FIXME: Still have a small flicker with this dual effect approach
-
   // Trigger validation from value changes
   React.useEffect(() => {
     // If we heard back from the server, consider us validated and mark
@@ -316,39 +314,34 @@ export function useValidatedInput({
     }
   }, [name, serverFormInfo]);
 
-  // Trigger validation from value changes
   React.useEffect(() => {
-    if (dirty || touched) {
-      // Otherwise start validation if we're dirty/touched
-      setValidationState("validating");
-    }
-  }, [value, dirty, touched]);
-
-  React.useEffect(() => {
-    async function go() {
-      if (validationState !== "validating" || !formValidations) {
-        return;
-      }
+    (async function go() {
       if (controller.current) {
         controller.current.abort();
       }
+      let inputValidations = formValidations?.[name];
+      if (!inputValidations) {
+        console.warn(`No validations found for the "${name}" input`);
+        setValidationState("done");
+        return;
+      }
       let localController = new AbortController();
       controller.current = localController;
+      setValidationState("validating");
       const validity = await validateInput(
         inputRef.current,
         value,
-        formValidations[name]
+        inputValidations
       );
       if (localController.signal.aborted) {
         return;
       }
       setValidationState("done");
       setValidity(validity);
-    }
-    go().catch((e) =>
+    })().catch((e) =>
       console.error("Caught error in validateInput useEffect", e)
     );
-  }, [value, validationState, formValidations, name]);
+  }, [dirty, touched, value, formValidations, name]);
 
   function getInputAttrs({
     onChange,
@@ -364,7 +357,7 @@ export function useValidatedInput({
     return {
       ref: inputRef,
       name,
-      "aria-invalid": validity?.valid === false,
+      ...(validity?.valid === false ? { "aria-invalid": true } : {}),
       // TODO: aria-described-by?
       onChange: callAll(onChange, (e: React.ChangeEvent<HTMLInputElement>) => {
         setDirty(true);
