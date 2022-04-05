@@ -1,5 +1,4 @@
 import babel from "@rollup/plugin-babel";
-import copy from "rollup-plugin-copy";
 
 import packageJson from "./package.json";
 
@@ -14,11 +13,8 @@ const banner = `/**
  * @license ISC
  */`;
 
-// TODO: sourcemaps and banners
-
 export default function rollup() {
   const SOURCE_DIR = "src";
-  const OUTPUT_DIR = "dist";
   const output = {
     sourcemap: true,
     banner,
@@ -30,19 +26,19 @@ export default function rollup() {
       input: `${SOURCE_DIR}/index.tsx`,
       output: [
         {
-          file: `${OUTPUT_DIR}/${packageJson.browser}`,
+          file: packageJson.browser,
           format: "umd",
           name: "RemixValidityState",
           globals: { react: "React" },
           ...output,
         },
         {
-          file: `${OUTPUT_DIR}/${packageJson.main}`,
+          file: packageJson.main,
           format: "cjs",
           ...output,
         },
         {
-          file: `${OUTPUT_DIR}/${packageJson.module}`,
+          file: packageJson.module,
           format: "esm",
           ...output,
         },
@@ -58,19 +54,6 @@ export default function rollup() {
             "@babel/preset-typescript",
           ],
           extensions: [".ts", ".tsx"],
-        }),
-        copy({
-          targets: [
-            { src: "package.json", dest: OUTPUT_DIR },
-            { src: "README.md", dest: OUTPUT_DIR },
-            { src: "LICENSE.md", dest: OUTPUT_DIR },
-            {
-              src: "src/index.tsx",
-              dest: "demo-app/app",
-              rename: "remix-validity-state.tsx",
-            },
-          ],
-          verbose: true,
         }),
       ],
     },
