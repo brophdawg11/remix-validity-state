@@ -3,14 +3,18 @@
   "version": "0.1.0",
   "author": "matt@brophy.org",
   "description": "A Remix form validation library extending on the HTML ValidityState API",
-  "browser": "remix-validity-state.umd.js",
-  "main": "remix-validity-state.cjs.js",
-  "module": "remix-validity-state.esm.js",
+  "browser": "dist/remix-validity-state.umd.js",
+  "main": "dist/remix-validity-state.cjs.js",
+  "module": "dist/remix-validity-state.esm.js",
   "types": "index.d.ts",
+  "files": [
+    "src/",
+    "dist/"
+  ],
   "sideEffects": "false",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/brophdawg11/remix-enhanced-input.git"
+    "url": "git+https://github.com/brophdawg11/remix-validity-state.git"
   },
   "keywords": [
     "remix",
@@ -22,13 +26,14 @@
   ],
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/brophdawg11/remix-enhanced-input/issues"
+    "url": "https://github.com/brophdawg11/remix-validity-state/issues"
   },
-  "homepage": "https://github.com/brophdawg11/remix-enhanced-input#readme",
+  "homepage": "https://github.com/brophdawg11/remix-validity-state#readme",
   "scripts": {
     "build": "tsc -b && rollup -c ./rollup.config.js",
     "clean": "rm -rf dist/",
     "lint": "eslint --ext .js,.ts,.tsx .",
+    "prepublishOnly": "npm run clean && npm run build",
     "test": "npm run test"
   },
   "peerDependencies": {

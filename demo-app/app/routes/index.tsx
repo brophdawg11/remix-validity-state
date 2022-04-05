@@ -3,18 +3,21 @@ import type { ActionFunction } from "@remix-run/server-runtime";
 import { json, redirect } from "@remix-run/server-runtime";
 import { Form, useActionData } from "@remix-run/react";
 
-import {
-  Debug,
+// Import from the local version of remix-validity-state copied during the
+// rollup build.  This avoids issues of dup versions of react from the
+// parent/child node_modules folders
+import type {
+  ErrorMessages,
   FormValidations,
   ServerFormInfo,
-} from "~/remix-validity-state-stub";
+} from "~/remix-validity-state";
 import {
-  ErrorMessages,
+  Debug,
   FormContext,
   Field,
   useValidatedInput,
   validateServerFormData,
-} from "~/remix-validity-state-stub";
+} from "~/remix-validity-state";
 
 type ActionData = {
   serverFormInfo: ServerFormInfo;

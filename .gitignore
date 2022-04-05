@@ -4,6 +4,7 @@
 .DS_Store
 
 .cache/
+/demo-app/app/remix-validity-state.tsx
 /demo-app/build
 /dist
 /node_modules

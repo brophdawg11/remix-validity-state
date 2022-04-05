@@ -67,7 +67,7 @@ export default function rollup(options) {
             {
               src: "src/index.tsx",
               dest: "demo-app/app",
-              rename: "remix-validity-state-stub.tsx",
+              rename: "remix-validity-state.tsx",
             },
           ],
           verbose: true,

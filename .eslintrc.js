@@ -8,4 +8,7 @@ module.exports = {
     "@remix-run/eslint-config/jest",
     "prettier",
   ],
+  rules: {
+    "@typescript-eslint/consistent-type-imports": "warn",
+  },
 };
