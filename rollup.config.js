@@ -16,9 +16,9 @@ const banner = `/**
 
 // TODO: sourcemaps and banners
 
-export default function rollup(options) {
+export default function rollup() {
   const SOURCE_DIR = "src";
-  const OUTPUT_DIR = "dist/node_modules/remix-validity-state";
+  const OUTPUT_DIR = "dist";
   const output = {
     sourcemap: true,
     banner,

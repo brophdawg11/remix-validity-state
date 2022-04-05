@@ -10,14 +10,14 @@ import type {
   ErrorMessages,
   FormValidations,
   ServerFormInfo,
-} from "~/remix-validity-state";
+} from "remix-validity-state";
 import {
   Debug,
   FormContext,
   Field,
   useValidatedInput,
   validateServerFormData,
-} from "~/remix-validity-state";
+} from "remix-validity-state";
 
 type ActionData = {
   serverFormInfo: ServerFormInfo;
