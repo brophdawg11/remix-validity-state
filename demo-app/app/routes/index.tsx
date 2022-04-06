@@ -2,20 +2,14 @@ import * as React from "react";
 import type { ActionFunction } from "@remix-run/server-runtime";
 import { json, redirect } from "@remix-run/server-runtime";
 import { Form, useActionData } from "@remix-run/react";
-
-// Import from the local version of remix-validity-state copied during the
-// rollup build.  This avoids issues of dup versions of react from the
-// parent/child node_modules folders
 import type {
   ErrorMessages,
   FormValidations,
   ServerFormInfo,
 } from "remix-validity-state";
 import {
-  Debug,
   FormContext,
   Field,
-  useValidatedInput,
   validateServerFormData,
 } from "remix-validity-state";
 
@@ -31,7 +25,8 @@ const formValidations: FormValidations = {
   firstName: {
     // Standard HTML validations have primitives as their value
     required: true,
-    maxLength: 15,
+    maxLength: 20,
+    pattern: "^[a-zA-Z]+$",
     // Custom validations provide functions to validate.  Can be sync or async
     // and must return a boolean
     mustBeMatt(value) {
@@ -80,52 +75,9 @@ export const action: ActionFunction = async ({ request }) => {
   return redirect("/");
 };
 
-interface LastNameInputProps {
-  serverFormInfo?: ServerFormInfo;
-  debug?: boolean;
-}
-
-export function LastNameInput({ serverFormInfo, debug }: LastNameInputProps) {
-  let { info, getInputAttrs } = useValidatedInput({ name: "lastName" });
-
-  return (
-    <div>
-      {/* TODO: add getLabelAttrs to useValidatedInput */}
-      <label htmlFor={"lastName"}>Last Name*</label>
-      <br />
-      <input
-        {...getInputAttrs({
-          defaultValue: serverFormInfo?.submittedFormData?.lastName,
-        })}
-      />
-
-      {/* Display validation state */}
-      {/* TODO: add getErrorAttrs to useValidatedInput */}
-      {info.touched &&
-        (info.state === "validating" ? (
-          <p>Validating...</p>
-        ) : info.validity?.valid ? (
-          <p>✅</p>
-        ) : !info.validity?.valid ? (
-          <p>Something's wrong, but I ain't gonna tell ya what!</p>
-        ) : null)}
-
-      {debug && (
-        <Debug
-          name="lastName"
-          info={info}
-          formValidations={formValidations}
-          serverFormInfo={serverFormInfo}
-        />
-      )}
-    </div>
-  );
-}
-
 export default function Index() {
   let actionData = useActionData<ActionData>();
   let formRef = React.useRef<HTMLFormElement>(null);
-  let [debug, setDebug] = React.useState(true);
 
   // Use built-in browser validation prior to JS loading, then switch
   React.useEffect(() => {
@@ -134,48 +86,21 @@ export default function Index() {
 
   return (
     <div>
-      <label style={{ float: "right" }}>
-        <input
-          type="checkbox"
-          value="true"
-          checked={debug}
-          onChange={(e) => setDebug(e.currentTarget.checked)}
-        />
-        Enable Debug?
-      </label>
-
-      {/* Provide form-level validation info and server response */}
       <FormContext.Provider
         value={{
           formValidations,
           errorMessages: customErrorMessages,
-          requiredNotation: "*",
           serverFormInfo: actionData?.serverFormInfo,
-          debug,
         }}
       >
-        <Form
-          method="post"
-          autoComplete="off"
-          ref={formRef}
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-          }}
-        >
-          {/* Least UI control */}
+        <Form method="post" autoComplete="off" ref={formRef}>
           <Field name="firstName" label="First Name" />
+          <br />
           <Field name="middleInitial" label="Middle Initial" />
-
-          {/* Most UI control - see above */}
-          <LastNameInput
-            serverFormInfo={actionData?.serverFormInfo}
-            debug={debug}
-          />
-
-          <div>
-            <button type="submit">Submit</button>
-          </div>
+          <br />
+          <Field name="lastName" label="Last Name" />
+          <br />
+          <button type="submit">Submit</button>
         </Form>
       </FormContext.Provider>
     </div>

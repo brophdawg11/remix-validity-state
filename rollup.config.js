@@ -13,6 +13,9 @@ const banner = `/**
  * @license ISC
  */`;
 
+let getOutputFile = (f) =>
+  [process.env.OUTPUT_DIR || "", f].join("/").replace(/^\//, "");
+
 export default function rollup() {
   const SOURCE_DIR = "src";
   const output = {
@@ -26,19 +29,19 @@ export default function rollup() {
       input: `${SOURCE_DIR}/index.tsx`,
       output: [
         {
-          file: packageJson.browser,
+          file: getOutputFile(packageJson.browser),
           format: "umd",
           name: "RemixValidityState",
           globals: { react: "React" },
           ...output,
         },
         {
-          file: packageJson.main,
+          file: getOutputFile(packageJson.main),
           format: "cjs",
           ...output,
         },
         {
-          file: packageJson.module,
+          file: getOutputFile(packageJson.module),
           format: "esm",
           ...output,
         },
@@ -58,7 +61,7 @@ export default function rollup() {
               "@babel/plugin-transform-runtime",
               {
                 helpers: true,
-                regenerator: true, // We polyfill so we don't need regenerator.
+                regenerator: true,
               },
             ],
           ],

@@ -104,7 +104,6 @@ interface FormContextObject {
   errorMessages?: ErrorMessages;
   serverFormInfo?: ServerFormInfo;
   requiredNotation?: string;
-  debug?: boolean;
 }
 //#endregion
 
@@ -157,9 +156,12 @@ function invariant(value: any, message?: string) {
   }
 }
 
-function isPromise(p: any) {
-  return p instanceof Promise;
-}
+const getInputId = (name: string) => name;
+const getErrorsId = (name: string) => getInputId(name) + "-errors";
+const callAll =
+  (...fns: (Function | undefined)[]) =>
+  (...args: any[]) =>
+    fns.forEach((fn) => fn?.(...args));
 
 function getBaseValidityState(): ExtendedValidityState {
   return {
@@ -186,9 +188,7 @@ async function validateInput(
 ): Promise<ExtendedValidityState> {
   let validity = getBaseValidityState();
   await Promise.all(
-    Object.entries(inputValidations || {}).map(async (e) => {
-      let attr = e[0];
-      let attrValue = e[1];
+    Object.entries(inputValidations || {}).map(async ([attr, attrValue]) => {
       // FIXME:
       //@ts-ignore
       const builtInValidation: Validator = builtInValidations[attr];
@@ -197,10 +197,8 @@ async function validateInput(
         isInvalid = inputEl?.validity
           ? inputEl?.validity[builtInValidation.domKey]
           : !builtInValidation.validate(value, String(attrValue));
-      } else if (typeof attrValue === "function") {
-        isInvalid = !(await attrValue(value));
       } else {
-        console.error(`No validation completed for ${attr}`);
+        isInvalid = !(await attrValue(value));
       }
       validity[builtInValidation?.domKey || attr] = isInvalid;
       validity.valid = validity.valid && !isInvalid;
@@ -209,7 +207,7 @@ async function validateInput(
   return validity;
 }
 
-// Perform all specified custom validations for a single input
+// Perform all validations for a submitted form on the server
 export async function validateServerFormData(
   formData: FormData,
   formValidations: FormValidations
@@ -244,30 +242,30 @@ export async function validateServerFormData(
 ////////////////////////////////////////////////////////////////////////////////
 //#region Components + Hooks
 
+// Listen/Unlisten for the given event and call at most one time
 function useOneTimeListener(
   ref: React.RefObject<HTMLElement>,
   event: string,
   cb: () => void
 ) {
   let unlisten: (() => void) | null = null;
+
   let onEvent = React.useCallback(() => {
     cb();
     unlisten?.();
   }, [cb, unlisten]);
+
   unlisten = React.useCallback<() => void>(() => {
     ref.current?.removeEventListener(event, onEvent);
   }, [event, onEvent, ref]);
+
   React.useEffect(() => {
     ref.current?.addEventListener(event, onEvent, { once: true });
     return unlisten || (() => {});
   }, [event, onEvent, ref, unlisten]);
 }
 
-let callAll =
-  (...fns: (Function | undefined)[]) =>
-  (...args: any[]) =>
-    fns.forEach((fn) => fn?.(...args));
-
+// Handle validations for a single input
 export function useValidatedInput({
   name,
   formValidations: formValidationsProp,
@@ -288,6 +286,9 @@ export function useValidatedInput({
   );
 
   let wasSubmitted = serverFormInfo != null;
+  let prevServerFormInfo = React.useRef<ServerFormInfo | undefined>(
+    serverFormInfo
+  );
   let inputRef = React.useRef<HTMLInputElement>(null);
   let [value, setValue] = React.useState("");
   let [dirty, setDirty] = React.useState<boolean>(wasSubmitted);
@@ -299,26 +300,36 @@ export function useValidatedInput({
     InputInfo["validity"] | undefined
   >(serverFormInfo?.inputs?.[name]?.validity);
   let controller = React.useRef<AbortController | null>(null);
+  let showErrors = validity?.valid === false && touched;
 
   useOneTimeListener(inputRef, "blur", () => setTouched(true));
 
-  // Trigger validation from value changes
   React.useEffect(() => {
-    // If we heard back from the server, consider us validated and mark
-    // dirty/touched to show errors
-    if (serverFormInfo) {
-      setDirty(true);
-      setTouched(true);
-      setValidationState("done");
-      setValidity(serverFormInfo.inputs[name].validity);
-    }
-  }, [name, serverFormInfo]);
+    async function go() {
+      // If we heard back from the server, consider us validated and mark
+      // dirty/touched to show errors
+      if (serverFormInfo) {
+        setDirty(true);
+        setTouched(true);
+        setValidationState("done");
+        if (serverFormInfo.inputs[name]) {
+          setValidity(serverFormInfo.inputs[name].validity);
+        }
+      }
 
-  React.useEffect(() => {
-    (async function go() {
+      // If this is the first render after a server validation, don't re-run
+      // validations on the client
+      if (prevServerFormInfo.current !== serverFormInfo) {
+        prevServerFormInfo.current = serverFormInfo;
+        return;
+      }
+
+      // Abort any ongoing async validations
       if (controller.current) {
         controller.current.abort();
       }
+
+      // Validate the input
       let inputValidations = formValidations?.[name];
       if (!inputValidations) {
         console.warn(`No validations found for the "${name}" input`);
@@ -338,11 +349,12 @@ export function useValidatedInput({
       }
       setValidationState("done");
       setValidity(validity);
-    })().catch((e) =>
-      console.error("Caught error in validateInput useEffect", e)
-    );
-  }, [dirty, touched, value, formValidations, name]);
+    }
 
+    go().catch((e) => console.error("Error in validateInput useEffect", e));
+  }, [dirty, touched, value, formValidations, name, serverFormInfo]);
+
+  // Provide the caller a prop getter to be spread onto the <input>
   function getInputAttrs({
     onChange,
     ...attrs
@@ -354,16 +366,47 @@ export function useValidatedInput({
           : acc,
       {}
     );
-    return {
+    let inputAttrs = {
       ref: inputRef,
       name,
-      ...(validity?.valid === false ? { "aria-invalid": true } : {}),
-      // TODO: aria-described-by?
+      id: getInputId(name),
+      defaultValue: serverFormInfo?.submittedFormData?.lastName,
       onChange: callAll(onChange, (e: React.ChangeEvent<HTMLInputElement>) => {
         setDirty(true);
         setValue(e.target.value);
       }),
+      ...(showErrors
+        ? {
+            "aria-invalid": true,
+            "aria-errormessage": getErrorsId(attrs.name || name),
+          }
+        : {}),
       ...validationAttrs,
+      ...attrs,
+    };
+
+    return inputAttrs;
+  }
+
+  // Provide the caller a prop getter to be spread onto the <label>
+  function getLabelAttrs({
+    ...attrs
+  }: React.ComponentPropsWithoutRef<"label"> = {}): React.ComponentPropsWithoutRef<"label"> {
+    return {
+      htmlFor: getInputId(name),
+      defaultValue: serverFormInfo?.submittedFormData?.radioThing,
+      ...attrs,
+    };
+  }
+
+  // Provide the caller a prop getter to be spread onto the element containing
+  // their rendered validation errors
+  function getErrorsAttrs({
+    ...attrs
+  }: React.ComponentPropsWithoutRef<"div"> = {}): React.ComponentPropsWithoutRef<"div"> {
+    return {
+      id: getErrorsId(name),
+      ...(showErrors ? { role: "alert" } : {}),
       ...attrs,
     };
   }
@@ -377,27 +420,31 @@ export function useValidatedInput({
     } as InputInfo,
     controller,
     getInputAttrs,
+    getLabelAttrs,
+    getErrorsAttrs,
   };
 }
 
 export interface ErrorProps {
+  id?: string;
   validity: InputInfo["validity"];
   messages?: ErrorMessages;
 }
 
 // Display errors for a given input
-export function Errors({ validity, messages }: ErrorProps) {
+export function Errors({ id, validity, messages }: ErrorProps) {
+  //TODO: Support for interpolating the attribute value into the error message
   const errorMessages: ErrorMessages = {
     valueMissing: "Field is required",
-    tooShort: "Value must be at least N characters",
-    tooLong: "Value must be at least N characters",
-    rangeUnderflow: "Value must be at least N",
-    rangeOverflow: "Value must be at most N",
+    tooShort: "Value is too short",
+    tooLong: "Value is too long",
+    rangeUnderflow: "Value is too small",
+    rangeOverflow: "Value is too large",
     patternMismatch: "Value does not match the required pattern",
     ...messages,
   };
   return (
-    <ul style={{ color: "red" }}>
+    <ul id={id} role="alert" style={{ color: "red" }}>
       {Object.entries(validity || {})
         .filter((e) => e[0] !== "valid" && e[1])
         .map(([validation]) => (
@@ -417,23 +464,33 @@ export function Field({ name, label }: FieldProps) {
   let ctx = React.useContext(FormContext);
   invariant(ctx, "<Field> must be used inside a <FormContext.Provider>");
 
-  let { info, getInputAttrs } = useValidatedInput({ name });
-  let validationDisplay = {
-    idle: null,
-    validating: <p>Validating...</p>,
-    done: info.validity?.valid ? (
-      <p>✅</p>
-    ) : (
-      <Errors messages={ctx.errorMessages} validity={info.validity} />
-    ),
-  };
+  let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } =
+    useValidatedInput({ name });
+
+  function getValidationDisplay() {
+    if (info.state === "idle") {
+      return null;
+    }
+    if (info.state === "validating") {
+      return <p>Validating...</p>;
+    }
+    if (info.validity?.valid) {
+      return <p>✅</p>;
+    }
+    return (
+      <Errors
+        {...getErrorsAttrs({})}
+        messages={ctx?.errorMessages}
+        validity={info.validity}
+      />
+    );
+  }
+
   return (
     <div>
-      <label htmlFor={name}>
+      <label {...getLabelAttrs({ "data-custom-thing": "2" })}>
         {label}
-        {ctx.requiredNotation && ctx.formValidations[name].required
-          ? ctx.requiredNotation
-          : null}
+        {ctx.formValidations[name].required ? "*" : null}
       </label>
       <br />
       <input
@@ -443,58 +500,7 @@ export function Field({ name, label }: FieldProps) {
       />
 
       {/* Display validation state */}
-      {(ctx.serverFormInfo != null || info.touched) &&
-        validationDisplay[info.state]}
-
-      {ctx?.debug && (
-        <Debug
-          name={name}
-          info={info}
-          formValidations={ctx.formValidations}
-          serverFormInfo={ctx.serverFormInfo}
-        />
-      )}
-    </div>
-  );
-}
-
-interface DebugProps {
-  name: string;
-  info: InputInfo;
-  formValidations: FormValidations;
-  serverFormInfo?: ServerFormInfo;
-}
-
-// Useful for debugging :)
-export function Debug({
-  name,
-  info,
-  formValidations,
-  serverFormInfo,
-}: DebugProps) {
-  return (
-    <div style={{ paddingTop: "1rem" }}>
-      <pre style={{ margin: 0, fontWeight: "bold" }}>Input Validations:</pre>
-      <pre style={{ margin: 0 }}>
-        {JSON.stringify(formValidations[name], null, 2)}
-      </pre>
-      <pre style={{ margin: 0, fontWeight: "bold" }}>Input Info:</pre>
-      <pre style={{ margin: 0 }}>{JSON.stringify(info, null, 2)}</pre>
-      <br />
-      <pre style={{ margin: 0, fontWeight: "bold" }}>
-        Server Form/Input Info:
-      </pre>
-      <pre style={{ margin: 0 }}>
-        {JSON.stringify(
-          {
-            valid: serverFormInfo?.valid,
-            submittedFormData: serverFormInfo?.submittedFormData,
-            [`inputs.${name}`]: serverFormInfo?.inputs[name],
-          },
-          null,
-          2
-        )}
-      </pre>
+      {(ctx.serverFormInfo != null || info.touched) && getValidationDisplay()}
     </div>
   );
 }
