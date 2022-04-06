@@ -8,6 +8,7 @@
   - [Design Goals](#design-goals)
   - [Installation](#installation)
   - [Usage](#usage)
+    - [Demo App](#demo-app)
     - [Getting Started](#getting-started)
       - [Define your form validations](#define-your-form-validations)
       - [Provide your validations via `FormContext`](#provide-your-validations-via-formcontext)
@@ -19,7 +20,7 @@
       - [`EnhancedValidityState`](#enhancedvaliditystate)
       - [Custom Validations](#custom-validations)
       - [useValidatedInput()](#usevalidatedinput)
-    - [Error Messages](#error-messages)
+      - [Error Messages](#error-messages)
   - [Not Yet Implemented](#not-yet-implemented)
 
 ## Design Goals
@@ -53,6 +54,17 @@ Semantically correct and accessible `<form>` markup is verbose. Any convenient f
 ```
 
 ## Usage
+
+### Demo App
+
+There's a Remix app in the `demo-app/` folder of this repo that you can run locally if you want to play around with it:
+
+```bash
+git clone git@github.com:brophdawg11/remix-validity-state.git
+cd remix-validity-state/demo-app
+npm ci
+npm run dev
+```
 
 ### Getting Started
 
@@ -234,7 +246,7 @@ Let's look at an example usage:
 </div>
 ```
 
-### Error Messages
+#### Error Messages
 
 TODO...
 
