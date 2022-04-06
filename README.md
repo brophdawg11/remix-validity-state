@@ -196,7 +196,7 @@ interface InputInfo {
 }
 ```
 
-`getInputAttrs`, `getLabelAttrs`, and `getErrorsAttrs` are [prop getters](https://kentcdodds.com/blog/how-to-give-rendering-control-to-users-with-prop-getters) that allow you to render you own custom `<input>`/`<label>` elements and error displays, while handling all of the validation attrs, `id`, `for`, `aria-\*` and other relevant attribute for your form markup.
+`getInputAttrs`, `getLabelAttrs`, and `getErrorsAttrs` are [prop getters](https://kentcdodds.com/blog/how-to-give-rendering-control-to-users-with-prop-getters) that allow you to render you own custom `<input>`/`<label>` elements and error displays, while handling all of the validation attrs, `id`, `for`, `aria-*`, and other relevant attribute for your form markup.
 
 Let's look at an example usage:
 
@@ -222,7 +222,7 @@ TODO...
 
 ## Not Yet Implemented
 
-Currently, this library has only supports simple <input>The following items are not currently supported, but are planned:
+Currently, this library has only supports simple `<input>` elements. The following items are not currently supported, but are planned:
 
 - Radio Buttons
 - Checkboxes
