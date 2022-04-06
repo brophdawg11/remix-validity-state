@@ -47,11 +47,20 @@ export default function rollup() {
       plugins: [
         babel({
           exclude: /node_modules/,
-          babelHelpers: "bundled",
+          babelHelpers: "runtime",
           presets: [
             ["@babel/preset-env", { loose: true }],
             "@babel/preset-react",
             "@babel/preset-typescript",
+          ],
+          plugins: [
+            [
+              "@babel/plugin-transform-runtime",
+              {
+                helpers: true,
+                regenerator: true, // We polyfill so we don't need regenerator.
+              },
+            ],
           ],
           extensions: [".ts", ".tsx"],
         }),
