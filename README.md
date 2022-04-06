@@ -18,11 +18,11 @@ Thanks to `Remix`, this is finally _much_ more straightforward than it has been 
 
 **3. Expose validation results via a [`ValidityState`](https://developer.mozilla.org/en-US/docs/Web/API/ValidityState)-like API**
 
-Need an API to explain the validation state of an input Let's [`#useThePlatform`](https://twitter.com/search?q=%23usetheplatform) and built on `ValidityState`.
+We will need an API to explain the validation state of an input...good news - the web already has one! Let's [`#useThePlatform`](https://twitter.com/search?q=%23usetheplatform) and build on top of `ValidityState`.
 
 **4. Permit custom sync/async validations beyond those built into HTML**
 
-Congrats for making it to bullet 4 and not leaving as soon as we mentioned HTML validations. Don't worry - it's not lost on me that folks need to chedk their email addresses for existence in the DB. We've got you covered with custom sync/async validations.
+Congrats for making it to bullet 4 and not leaving as soon as we mentioned the super-simple HTML validations. Don't worry - it's not lost on me that folks need to check their email addresses for uniqueness in the DB. We've got you covered with custom sync/async validations.
 
 **5. Provide limited abstractions to simplify form markup generation**
 
@@ -38,12 +38,12 @@ Semantically correct and accessible `<form>` markup is verbose. Any convenient f
 
 ### Getting Started
 
-#### Define your FormValidations
+#### Define your form validations
 
 In order to share validations between server and client, we define a single object containing all of our form field validations, keyed by the input names. Validations are specified using the built-in HTML validation attributes, exactly as you'd render them onto a JSX `<input>`.
 
 ```js
-const formValidations: FormValidations = {
+const formValidations = {
   firstName: {
     required: true,
     maxLength: 20,
@@ -58,11 +58,11 @@ const formValidations: FormValidations = {
 };
 ```
 
-This allows us to directly render these attributes via something like `<input {...formValidations.firstName} />`
+This allows us to directly render these attributes onto our HTML inputs via something like `<input name="firstName" {...formValidations.firstName} />`
 
-#### Provide your validations via FormContext
+#### Provide your validations via `FormContext`
 
-In order to make these validations easily accessible, we provide them via a context that should wrap your underlying `<form>`:
+In order to make these validations easily accessible, we provide them via context that should wrap your underlying `<form>`:
 
 ```jsx
 <FormContext.Provider value={{ formValidations }}>
@@ -70,21 +70,21 @@ In order to make these validations easily accessible, we provide them via a cont
 </FormContext.Provider
 ```
 
-#### Render <Field> Components inside your FormContext
+#### Render `<Field>` Components inside your `FormContext`
 
 ```jsx
 <FormContext.Provider value={{ formValidations }}>
   <Field name="firstName" label="First Name" />
   <Field name="middleInitial" label="Middle Name" />
   <Field name="lastName" label="Last Name" />
-</FormContext.Provider
+</FormContext.Provider>
 ```
 
 The `<Field>` component is our wrapper that handles the `<label>`, `<input>`, and real-time error display.
 
 #### Wire up server-side validations
 
-In Remix, your submit your forms to an `action` which receives the `FormData`, simply call `validateServerFormData` with the `formData` and your previously defined `formValidations`.
+In Remix, your submit your forms to an `action` which receives the `FormData`. In your action, call `validateServerFormData` with the `formData` and your previously defined `formValidations`:
 
 ```js
 export async function action({ request }) {
@@ -95,7 +95,7 @@ export async function action({ request }) {
   );
   if (!serverFormInfo.valid) {
     // Uh oh - we found some errors, send them back up to the UI for display
-    return json < ActionData > { serverFormInfo };
+    return json({ serverFormInfo });
   }
   // Congrats!  Your form data is valid - do what ya gotta do with it
 }
@@ -103,7 +103,7 @@ export async function action({ request }) {
 
 #### Add your server action response to the `FormContext`
 
-When we validate on the server, we may get errors back that we didn't not catch during client-side validation (or we didn't run because JS hadn't yet loaded!). In order to render those, we can provide the response from `validateServerFormData` to our `FormContext` and it'll be used internally. the `serverFormInfo` also contains all of the submitted input values to be pre-populated into the inputs in a no-JS scenario.
+When we validate on the server, we may get errors back that we didn't not catch during client-side validation (or we didn't run because JS hadn't yet loaded!). In order to render those, we can provide the response from `validateServerFormData` to our `FormContext` and it'll be used internally. The `serverFormInfo` also contains all of the submitted input values to be pre-populated into the inputs in a no-JS scenario.
 
 ```js
 export default function MyRemixRouteComponent() {
@@ -174,13 +174,10 @@ const formValidations: FormValidations = {
 
 This is the bread and butter of the library - and `<Field>` is really nothing more than a wrapper around this hook. Let's take a look at what it gives you:
 
-```
-let {
-  info,
-  getInputAttrs,
-  getLabelAttrs,
-  getErrorsAttrs,
-} = useValidatedInput({ name: 'firstName' });
+```js
+let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } = useValidatedInput({
+  name: "firstName",
+});
 ```
 
 `info` is of the following structure:
@@ -199,23 +196,23 @@ interface InputInfo {
 }
 ```
 
-`getInputAttrs`, `getLabelAttrs`, and `getErrorsAttrs` are [prop getters](https://kentcdodds.com/blog/how-to-give-rendering-control-to-users-with-prop-getters) that allow you to render you own custom `<input>`/`<label> elements and error displays, while hndling all of the validatior attrs, `id`, `for`, `aria-\*` and other relvant attribute for your form markup.
+`getInputAttrs`, `getLabelAttrs`, and `getErrorsAttrs` are [prop getters](https://kentcdodds.com/blog/how-to-give-rendering-control-to-users-with-prop-getters) that allow you to render you own custom `<input>`/`<label>` elements and error displays, while handling all of the validation attrs, `id`, `for`, `aria-\*` and other relevant attribute for your form markup.
 
 Let's look at an example usage:
 
-```
+```jsx
 <div>
   <label {...getLabelAttrs()}>My Label Value</label>
   <input {...getInputAttrs()} />
-  {info.touched && !info.validity.valid ?
+  {info.touched && !info.validity.valid ? (
     <ul {...getErrorsDisplay}>
       {Object.entries(info.validity || {})
         .filter((e) => e[0] !== "valid" && e[1] === true)
         .map(([validation]) => (
           <li key={validation}>🆘 {validation}</li>
         ))}
-    </ul> :
-    null}
+    </ul>
+  ) : null}
 </div>
 ```
 
