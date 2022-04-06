@@ -488,7 +488,7 @@ export function Field({ name, label }: FieldProps) {
 
   return (
     <div>
-      <label {...getLabelAttrs({ "data-custom-thing": "2" })}>
+      <label {...getLabelAttrs()}>
         {label}
         {ctx.formValidations[name].required ? "*" : null}
       </label>
