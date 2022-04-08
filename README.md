@@ -188,9 +188,13 @@ Custom validations are implemented as a sync or async function returning a boole
 
 ```js
 const formValidations: FormValidations = {
-  firstName: {
+  name: {
     required: true,
-    maxLength: 20,
+    maxLength: 50,
+  },
+  email: {
+    required: true,
+    maxLength: 50,
     async uniqueEmail(value) {
         let res = await fetch(...);
         let data = await res.json();
@@ -198,6 +202,25 @@ const formValidations: FormValidations = {
     },
   },
 }
+```
+
+#### Error Messages
+
+Basic error messaging is handled out of the box by `<Field>` for built-in HTML validations. If you are using custom validations, or if you want to override the built-in messaging, you can provide custom error messages through the `<FormContext>`. Custom error messages can either be a static string, or a function that receives the attribute value (built-in validations only), the input name, and the input value:
+
+```jsx
+const errorMessages = {
+  valueMissing: "This field is required",
+  tooLong: (attrValue, name, value) =>
+    `The ${name} field can only be up to ${attrValue} characters, ` +
+    `but you have entered ${value.length}`,
+  uniqueEmail: (_, name, value) =>
+    `The email address ${value} is already taken`,
+};
+
+<FormContext.Provider value={{ formValidations, errorMessages }}>
+  ...
+</FormContext.Provider>;
 ```
 
 #### useValidatedInput()
@@ -223,6 +246,19 @@ interface InputInfo {
   state: "idle" | "validating" | "done";
   // The current validity state of our input
   validity?: ExtendedValidityState;
+  // Map of ExtendedValiditystate field => error message for all current errors
+  errorMessages?: Record<string, string>;
+}
+```
+
+`validity` contains the current validation state of the input. Most notably `validity.valid`, tells you if the input is in a valid state.
+
+`errorMessages` is present if the input is invalid, and contains the error messages that should be displayed to the user (keyed by the field in `validity`):
+
+```js
+{
+  tooLong: 'The email field can only be up to 50 characters, but you have entered 60',
+  uniqueEmail: 'The email address john@doe.com is already taken',
 }
 ```
 
@@ -245,10 +281,6 @@ Let's look at an example usage:
   ) : null}
 </div>
 ```
-
-#### Error Messages
-
-TODO...
 
 ## Not Yet Implemented
 

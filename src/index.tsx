@@ -74,13 +74,17 @@ export type FormValidations = Record<string, Validations>;
 export type FormInfo = Record<string, InputInfo>;
 
 // validation key -> UI message to display
-export type ErrorMessages = Record<string, string>;
+export type ErrorMessage =
+  | string
+  | ((attrValue: string | undefined, name: string, value: string) => string);
+export type ErrorMessages = Record<string, ErrorMessage>;
 
 export interface InputInfo {
   touched: boolean;
   dirty: boolean;
   state: "idle" | "validating" | "done";
   validity?: ExtendedValidityState;
+  errorMessages?: Record<string, string>;
 }
 
 // Server-side only (currently) - validate all specified inputs in the formData
@@ -97,6 +101,7 @@ export type ServerFormInfo = {
 interface Validator {
   domKey: ValidityStateKey;
   validate(value: string, attrValue: string): boolean;
+  errorMessage: ErrorMessage;
 }
 
 interface FormContextObject {
@@ -115,33 +120,52 @@ const builtInValidations: Record<ValidationAttribute, Validator> = {
   required: {
     domKey: "valueMissing",
     validate: (value: string, attrValue: string): boolean => value.length > 0,
+    errorMessage: () => `Field is required`,
   },
   minLength: {
     domKey: "tooShort",
     validate: (value: string, attrValue: string): boolean =>
       value.length === 0 || value.length >= Number(attrValue),
+    errorMessage: (attrValue) =>
+      `Value must be at least ${attrValue} characters`,
   },
   maxLength: {
     domKey: "tooLong",
     validate: (value: string, attrValue: string): boolean =>
       value.length === 0 || value.length <= Number(attrValue),
+    errorMessage: (attrValue) =>
+      `Value must be at most ${attrValue} characters`,
   },
   min: {
     domKey: "rangeUnderflow",
     validate: (value: string, attrValue: string): boolean =>
       value.length === 0 || Number(value) < Number(attrValue),
+    errorMessage: (attrValue) =>
+      `Value must be greater than or equal to ${attrValue}`,
   },
   max: {
     domKey: "rangeOverflow",
     validate: (value: string, attrValue: string): boolean =>
       value.length === 0 || Number(value) > Number(attrValue),
+    errorMessage: (attrValue) =>
+      `Value must be less than or equal to ${attrValue}`,
   },
   pattern: {
     domKey: "patternMismatch",
     validate: (value: string, attrValue: string): boolean =>
       value.length === 0 || new RegExp(attrValue).test(value),
+    errorMessage: () => `Value does not match the expected pattern`,
   },
 };
+
+const builtInValidityToAttrMapping: Record<string, ValidationAttribute> =
+  Object.entries(builtInValidations).reduce(
+    (acc, e) =>
+      Object.assign(acc, {
+        [e[1].domKey]: e[0],
+      }),
+    {}
+  );
 
 export const FormContext = React.createContext<FormContextObject | null>(null);
 
@@ -266,18 +290,17 @@ function useOneTimeListener(
 }
 
 // Handle validations for a single input
-export function useValidatedInput({
-  name,
-  formValidations: formValidationsProp,
-  serverFormInfo: serverFormInfoProp,
-}: {
+export function useValidatedInput(opts: {
   name: string;
   formValidations?: FormValidations;
+  errorMessages?: ErrorMessages;
   serverFormInfo?: ServerFormInfo;
 }) {
   let ctx = React.useContext(FormContext);
-  let formValidations = formValidationsProp || ctx?.formValidations;
-  let serverFormInfo = serverFormInfoProp || ctx?.serverFormInfo;
+  let name = opts.name;
+  let formValidations = opts.formValidations || ctx?.formValidations;
+  let errorMessages = opts.errorMessages || ctx?.errorMessages;
+  let serverFormInfo = opts.serverFormInfo || ctx?.serverFormInfo;
 
   invariant(
     formValidations !== undefined,
@@ -300,6 +323,29 @@ export function useValidatedInput({
     InputInfo["validity"] | undefined
   >(serverFormInfo?.inputs?.[name]?.validity);
   let controller = React.useRef<AbortController | null>(null);
+  let currentErrorMessages: Record<string, string> | undefined;
+
+  if (validity?.valid === false && errorMessages) {
+    currentErrorMessages = Object.entries(validity)
+      .filter((e) => e[0] !== "valid" && e[1])
+      .reduce((acc, [validation, valid]) => {
+        let attr = builtInValidityToAttrMapping[validation];
+        let message =
+          errorMessages?.[validation] || builtInValidations[attr]?.errorMessage;
+        if (typeof message === "function") {
+          let attrValue = formValidations?.[name]?.[attr];
+          message = message(
+            attrValue ? String(attrValue) : undefined,
+            name,
+            value
+          );
+        }
+        return Object.assign(acc, {
+          [validation]: message,
+        });
+      }, {});
+  }
+
   let showErrors = validity?.valid === false && touched;
 
   useOneTimeListener(inputRef, "blur", () => setTouched(true));
@@ -417,41 +463,13 @@ export function useValidatedInput({
       touched,
       state: validationState,
       validity,
+      errorMessages: currentErrorMessages,
     } as InputInfo,
     controller,
     getInputAttrs,
     getLabelAttrs,
     getErrorsAttrs,
   };
-}
-
-export interface ErrorProps {
-  id?: string;
-  validity: InputInfo["validity"];
-  messages?: ErrorMessages;
-}
-
-// Display errors for a given input
-export function Errors({ id, validity, messages }: ErrorProps) {
-  //TODO: Support for interpolating the attribute value into the error message
-  const errorMessages: ErrorMessages = {
-    valueMissing: "Field is required",
-    tooShort: "Value is too short",
-    tooLong: "Value is too long",
-    rangeUnderflow: "Value is too small",
-    rangeOverflow: "Value is too large",
-    patternMismatch: "Value does not match the required pattern",
-    ...messages,
-  };
-  return (
-    <ul id={id} role="alert" style={{ color: "red" }}>
-      {Object.entries(validity || {})
-        .filter((e) => e[0] !== "valid" && e[1])
-        .map(([validation]) => (
-          <li key={validation}>🆘 {errorMessages[validation]}</li>
-        ))}
-    </ul>
-  );
 }
 
 export interface FieldProps {
@@ -467,8 +485,8 @@ export function Field({ name, label }: FieldProps) {
   let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } =
     useValidatedInput({ name });
 
-  function getValidationDisplay() {
-    if (info.state === "idle") {
+  function ValidationDisplay() {
+    if (ctx?.serverFormInfo != null || info.touched || info.state === "idle") {
       return null;
     }
     if (info.state === "validating") {
@@ -477,13 +495,7 @@ export function Field({ name, label }: FieldProps) {
     if (info.validity?.valid) {
       return <p>✅</p>;
     }
-    return (
-      <Errors
-        {...getErrorsAttrs({})}
-        messages={ctx?.errorMessages}
-        validity={info.validity}
-      />
-    );
+    return <Errors {...getErrorsAttrs({})} messages={info.errorMessages} />;
   }
 
   return (
@@ -500,8 +512,27 @@ export function Field({ name, label }: FieldProps) {
       />
 
       {/* Display validation state */}
-      {(ctx.serverFormInfo != null || info.touched) && getValidationDisplay()}
+      <ValidationDisplay />
     </div>
+  );
+}
+
+export interface ErrorProps {
+  id?: string;
+  messages?: ErrorMessages;
+}
+
+// Display errors for a given input
+export function Errors({ id, messages }: ErrorProps) {
+  if (!messages) {
+    return null;
+  }
+  return (
+    <ul id={id} role="alert" style={{ color: "red" }}>
+      {Object.entries(messages).map(([validation, message]) => (
+        <li key={validation}>🆘 {message}</li>
+      ))}
+    </ul>
   );
 }
 //#endregion
