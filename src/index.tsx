@@ -13,6 +13,7 @@ type Mutable<T> = {
  * Validation attributes built-in to the browser
  */
 interface InputValidations {
+  type?: string;
   required?: boolean;
   minLength?: number;
   maxLength?: number;
@@ -25,6 +26,7 @@ interface InputValidations {
  * An HTML validation attribute that can be placed on an input
  */
 export type ValidationAttribute =
+  | "type"
   | "required"
   | "minLength"
   | "maxLength"
@@ -117,6 +119,28 @@ interface FormContextObject {
 
 // Browser built-in validations
 const builtInValidations: Record<ValidationAttribute, Validator> = {
+  type: {
+    domKey: "typeMismatch",
+    validate: (value: string, attrValue: string): boolean => {
+      // FIXME: How much do we want to do here?
+      return true;
+    },
+    errorMessage: (attrValue) => {
+      let messages = {
+        date: "Invalid date",
+        email: "Invalid email",
+        number: "Invalid number",
+        tel: "Invalid phone number",
+        url: "Invalid URL",
+      };
+      if (typeof attrValue === "string" && attrValue in messages) {
+        // TODO: ???
+        //@ts-ignore
+        return messages[attrValue];
+      }
+      return "Invalid value";
+    },
+  },
   required: {
     domKey: "valueMissing",
     validate: (value: string, attrValue: string): boolean => value.length > 0,
@@ -486,7 +510,8 @@ export function Field({ name, label }: FieldProps) {
     useValidatedInput({ name });
 
   function ValidationDisplay() {
-    if (ctx?.serverFormInfo != null || info.touched || info.state === "idle") {
+    let showErrors = ctx?.serverFormInfo != null || info.touched;
+    if (!showErrors || info.state === "idle") {
       return null;
     }
     if (info.state === "validating") {

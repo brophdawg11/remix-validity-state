@@ -74,16 +74,21 @@ In order to share validations between server and client, we define a single obje
 
 ```js
 const formValidations = {
-  firstName: {
+  name: {
     required: true,
-    maxLength: 20,
+    maxLength: 50,
   },
   middleInitial: {
     pattern: "^[a-zA-Z]{1}$",
   },
   lastName: {
     required: true,
-    maxLength: 20,
+    maxLength: 50,
+  },
+  emailAddress: {
+    type: "email",
+    required: true,
+    maxLength: 50,
   },
 };
 ```
@@ -107,6 +112,7 @@ In order to make these validations easily accessible, we provide them via contex
   <Field name="firstName" label="First Name" />
   <Field name="middleInitial" label="Middle Name" />
   <Field name="lastName" label="Last Name" />
+  <Field name="emailAddress" label="Email Address" />
 </FormContext.Provider>
 ```
 
@@ -148,6 +154,7 @@ export default function MyRemixRouteComponent() {
       <Field name="firstName" label="First Name" />
       <Field name="middleInitial" label="Middle Name" />
       <Field name="lastName" label="Last Name" />
+      <Field name="emailAddress" label="Email Address" />
     </FormContext.Provider>
   );
 }
@@ -192,7 +199,7 @@ const formValidations: FormValidations = {
     required: true,
     maxLength: 50,
   },
-  email: {
+  emailAddress: {
     required: true,
     maxLength: 50,
     async uniqueEmail(value) {

@@ -49,6 +49,13 @@ const formValidations: FormValidations = {
       return !value || value.toLowerCase() === "brophy";
     },
   },
+  emailAddress: {
+    type: "email",
+    required: true,
+    uniqueEmail(value) {
+      return value !== "john@doe.com";
+    },
+  },
 };
 
 const customErrorMessages: ErrorMessages = {
@@ -100,6 +107,8 @@ export default function Index() {
           <Field name="middleInitial" label="Middle Initial" />
           <br />
           <Field name="lastName" label="Last Name" />
+          <br />
+          <Field name="emailAddress" label="Email Address" />
           <br />
           <button type="submit">Submit</button>
         </Form>
