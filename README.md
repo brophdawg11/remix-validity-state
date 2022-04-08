@@ -19,8 +19,8 @@
     - [Advanced Usages and Concepts](#advanced-usages-and-concepts)
       - [`EnhancedValidityState`](#enhancedvaliditystate)
       - [Custom Validations](#custom-validations)
-      - [useValidatedInput()](#usevalidatedinput)
       - [Error Messages](#error-messages)
+      - [useValidatedInput()](#usevalidatedinput)
   - [Not Yet Implemented](#not-yet-implemented)
 
 ## Design Goals
