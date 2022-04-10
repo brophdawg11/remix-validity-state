@@ -379,8 +379,6 @@ export function useValidatedInput(opts: {
   let showErrors =
     validity?.valid === false && validationState === "done" && touched;
 
-  console.log("showErrors", showErrors);
-
   useOneTimeListener(inputRef, "blur", () => setTouched(true));
 
   React.useEffect(() => {
