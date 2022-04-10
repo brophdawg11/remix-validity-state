@@ -7,6 +7,7 @@ import type {
   FormValidations,
   ServerFormInfo,
 } from "remix-validity-state";
+import { useValidatedInput } from "remix-validity-state";
 import {
   FormContext,
   Field,
@@ -25,13 +26,8 @@ const formValidations: FormValidations = {
   firstName: {
     // Standard HTML validations have primitives as their value
     required: true,
-    maxLength: 20,
+    minLength: 5,
     pattern: "^[a-zA-Z]+$",
-    // Custom validations provide functions to validate.  Can be sync or async
-    // and must return a boolean
-    mustBeMatt(value) {
-      return !value || value.toLowerCase() === "matt";
-    },
   },
   middleInitial: {
     pattern: "^[a-zA-Z]{1}$",
@@ -39,21 +35,14 @@ const formValidations: FormValidations = {
   lastName: {
     required: true,
     minLength: 5,
-    // Custom validations can also be async
-    // TODO: In remix it would be nice to add some syntactic sugar to directly
-    // use a fetcher to validate against an action.  And expose the fetcher
-    // state as the validation state.  Also consider aggregating all validation
-    // states up to the form level to know if the form overall is idle or validating.
-    async mustBeBrophy(value) {
-      await new Promise((r) => setTimeout(r, 1000));
-      return !value || value.toLowerCase() === "brophy";
-    },
+    pattern: "^[a-zA-Z]+$",
   },
   emailAddress: {
     type: "email",
     required: true,
-    uniqueEmail(value) {
-      return value !== "john@doe.com";
+    async uniqueEmail(value) {
+      await new Promise((r) => setTimeout(r, 1000));
+      return value !== "john@doe.com" && value !== "jane@doe.com";
     },
   },
 };
@@ -83,6 +72,27 @@ export const action: ActionFunction = async ({ request }) => {
   return redirect("/");
 };
 
+function EmailAddress() {
+  let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } =
+    useValidatedInput({
+      name: "emailAddress",
+    });
+  return (
+    <div>
+      <label {...getLabelAttrs()}>Email Address*</label>
+      <br />
+      <input {...getInputAttrs()} />
+      {info.touched && info.errorMessages ? (
+        <ul {...getErrorsAttrs()}>
+          {Object.values(info.errorMessages).map((msg) => (
+            <li key={msg}>🆘 {msg}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 export default function Index() {
   let actionData = useActionData<ActionData>();
   let formRef = React.useRef<HTMLFormElement>(null);
@@ -94,6 +104,93 @@ export default function Index() {
 
   return (
     <div>
+      <style>{`
+        body {
+          font-size: 16px;
+          box-sizing: border-box;
+        }
+
+        code {
+          background-color: rgba(220, 220, 220, 0.5);
+          padding: 0.2rem;
+          font-weight: bold;
+          font-size: 0.8rem;
+        }
+
+        .italic {
+          font-style: italic;
+        }
+
+        .demo-input-container {
+          margin-bottom: 2rem;
+          max-width: 800px;
+        }
+
+        .demo-input {
+          max-width: 400px;
+          padding-left: 2rem;
+        }
+
+        .rvs-label {
+          display: block;
+          padding-right: 1em;
+          width: 10rem;
+        }
+
+        .rvs-input {
+          display: inline-block;
+          border: 1px solid lightgrey;
+          padding: 0.5rem;
+          border-radius: 3px;
+          width: calc(100% - 1rem);
+        }
+
+        .rvs-input--invalid {
+          border-color: red;
+        }
+
+        .rvs-input.rvs-input--touched:not(.rvs-input--invalid):not(.rvs-input--validating) {
+          border-color: lightgreen;
+        }
+
+        .rvs-validating {
+          font-style: italic;
+          text-align: right;
+          margin: 0;
+          padding: 0;
+        }
+        
+        .rvs-errors {
+          color: red;
+          list-style: none;
+          margin: 0;
+          padding: 0;
+        }
+      `}</style>
+
+      <h1>Remix Validity State Demo Form</h1>
+
+      <p>
+        This is a sample form using{" "}
+        <a
+          href="https://github.com/brophdawg11/remix-validity-state"
+          target="_blank"
+          rel="noreferrer"
+        >
+          remix-validity-state
+        </a>{" "}
+        to demonstrate form validation capabilities. You can see the source code
+        of this form{" "}
+        <a
+          href="https://github.com/brophdawg11/remix-validity-state/blob/main/demo-app/app/routes/index.tsx"
+          target="_blank"
+          rel="noreferrer"
+        >
+          in github
+        </a>
+        .
+      </p>
+      <hr />
       <FormContext.Provider
         value={{
           formValidations,
@@ -102,14 +199,52 @@ export default function Index() {
         }}
       >
         <Form method="post" autoComplete="off" ref={formRef}>
-          <Field name="firstName" label="First Name" />
-          <br />
-          <Field name="middleInitial" label="Middle Initial" />
-          <br />
-          <Field name="lastName" label="Last Name" />
-          <br />
-          <Field name="emailAddress" label="Email Address" />
-          <br />
+          <div className="demo-input-container">
+            <p className="demo-input-message">
+              This first name input has{" "}
+              <code>required="true" minLength="5" pattern="^[a-zA-Z]+$"</code>
+            </p>
+            <div className="demo-input">
+              <Field name="firstName" label="First Name" />
+            </div>
+          </div>
+
+          <div className="demo-input-container">
+            <p className="demo-input-message">
+              This middle initial input has <code>pattern="^[a-zA-Z]{1}$"</code>
+            </p>
+            <div className="demo-input">
+              <Field name="middleInitial" label="Middle Initial" />
+            </div>
+          </div>
+
+          <div className="demo-input-container">
+            <p className="demo-input-message">
+              This first name input has{" "}
+              <code>required="true" minLength="5" pattern="^[a-zA-Z]+$"</code>
+            </p>
+            <div className="demo-input">
+              <Field name="lastName" label="Last Name" />
+            </div>
+          </div>
+
+          <div className="demo-input-container">
+            <p className="demo-input-message">
+              This email address input has{" "}
+              <code>type="email" required="true"</code>
+              , but it also has an async custom validation that can be used to
+              check for uniqueness. <br />
+              <br />
+              <span className="italic">
+                Hint: <code>john@doe.com</code> and <code>jane@doe.com</code>{" "}
+                are already taken!
+              </span>
+            </p>
+            <div className="demo-input">
+              <Field name="emailAddress" label="Email Address" />
+            </div>
+          </div>
+
           <button type="submit">Submit</button>
         </Form>
       </FormContext.Provider>

@@ -21,6 +21,7 @@
       - [Custom Validations](#custom-validations)
       - [Error Messages](#error-messages)
       - [useValidatedInput()](#usevalidatedinput)
+      - [Styling](#styling)
   - [Not Yet Implemented](#not-yet-implemented)
 
 ## Design Goals
@@ -232,7 +233,7 @@ const errorMessages = {
 
 #### useValidatedInput()
 
-This is the bread and butter of the library - and `<Field>` is really nothing more than a wrapper around this hook. Let's take a look at what it gives you:
+This is the bread and butter of the library - and `<Field>` is really nothing more than a wrapper around this hook. Let's take a look at what it gives you. The only required input is the input `name`:
 
 ```js
 let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } = useValidatedInput({
@@ -240,7 +241,7 @@ let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } = useValidatedInput({
 });
 ```
 
-`info` is of the following structure:
+The returned `info` value is of the following structure:
 
 ```ts
 interface InputInfo {
@@ -275,19 +276,55 @@ Let's look at an example usage:
 
 ```jsx
 <div>
-  <label {...getLabelAttrs()}>My Label Value</label>
+  <label {...getLabelAttrs()}>Email Address*</label>
   <input {...getInputAttrs()} />
-  {info.touched && !info.validity.valid ? (
-    <ul {...getErrorsDisplay}>
-      {Object.entries(info.validity || {})
-        .filter((e) => e[0] !== "valid" && e[1] === true)
-        .map(([validation]) => (
-          <li key={validation}>🆘 {validation}</li>
-        ))}
+  {info.touched && info.errorMessages ? (
+    <ul {...getErrorsAttrs()}>
+      {Object.values(info.errorMessages).map((msg) => (
+        <li key={msg}>🆘 {msg}</li>
+      ))}
     </ul>
   ) : null}
 </div>
 ```
+
+`useValidatedInput` can also be used instead of `FormContext` context for `formValidations` and `serverFormInfo` if necessary:
+
+```js
+let { info } = iuseValidatedInput({
+  name: "emailAddress",
+  formValidations,
+  serverFormInfo,
+});
+```
+
+Or, you can pass field-specific error message overrides that will be merged into the `errorMessages` provided by the `FormContext`:
+
+```js
+let { info } = useValidatedInput({
+  name: "emailAddress",
+  errorMessages: {
+    required: "Please provide an email address",
+  },
+});
+```
+
+#### Styling
+
+This library aims to be pretty hands-off when it comes to styling, since every use-case is so different. We expect most consumers will choose to create their own custom markup with direct usage of `useValidatedInput`. However, for simple use-cases of `<Field />` we expose a handful of stateful classes on the elements you may hook into with your own custom styles:
+
+- `rvs-label` - added to the built-in `<label>` element
+  - `rvs-label--touched` - present when the input has been blur'd
+  - `rvs-label--dirty` - present when the input has been changed
+  - `rvs-label--invalid` - present when the input is invalid
+  - `rvs-label--validating` - present when the input is processing async validations
+- `rvs-input` - added to the built-in `<input>` element
+  - `rvs-input--touched` - present when the input has been blur'd
+  - `rvs-input--dirty` - present when the input has been changed
+  - `rvs-input--invalid` - present when the input is invalid
+  - `rvs-input--validating` - present when the input is processing async validations
+- `rvs-validating` - present on the `<p>` tag that displays a `Validating...` message during async validation
+- `rvs-errors` - added to the built-in errors list `<ul>` element
 
 ## Not Yet Implemented
 

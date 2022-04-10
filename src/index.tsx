@@ -323,7 +323,13 @@ export function useValidatedInput(opts: {
   let ctx = React.useContext(FormContext);
   let name = opts.name;
   let formValidations = opts.formValidations || ctx?.formValidations;
-  let errorMessages = opts.errorMessages || ctx?.errorMessages;
+  let errorMessages =
+    opts.errorMessages || ctx?.errorMessages
+      ? {
+          ...ctx?.errorMessages,
+          ...opts.errorMessages,
+        }
+      : undefined;
   let serverFormInfo = opts.serverFormInfo || ctx?.serverFormInfo;
 
   invariant(
@@ -370,7 +376,10 @@ export function useValidatedInput(opts: {
       }, {});
   }
 
-  let showErrors = validity?.valid === false && touched;
+  let showErrors =
+    validity?.valid === false && validationState === "done" && touched;
+
+  console.log("showErrors", showErrors);
 
   useOneTimeListener(inputRef, "blur", () => setTouched(true));
 
@@ -424,6 +433,18 @@ export function useValidatedInput(opts: {
     go().catch((e) => console.error("Error in validateInput useEffect", e));
   }, [dirty, touched, value, formValidations, name, serverFormInfo]);
 
+  function getClasses(type: "label" | "input") {
+    return [
+      `rvs-${type}`,
+      showErrors ? `rvs-${type}--invalid` : "",
+      validationState === "validating" ? `rvs-${type}--validating` : "",
+      touched ? `rvs-${type}--touched` : "",
+      dirty ? `rvs-${type}--dirty` : "",
+    ]
+      .filter((v) => v)
+      .join(" ");
+  }
+
   // Provide the caller a prop getter to be spread onto the <input>
   function getInputAttrs({
     onChange,
@@ -440,6 +461,7 @@ export function useValidatedInput(opts: {
       ref: inputRef,
       name,
       id: getInputId(name),
+      className: getClasses("input"),
       defaultValue: serverFormInfo?.submittedFormData?.lastName,
       onChange: callAll(onChange, (e: React.ChangeEvent<HTMLInputElement>) => {
         setDirty(true);
@@ -463,6 +485,7 @@ export function useValidatedInput(opts: {
     ...attrs
   }: React.ComponentPropsWithoutRef<"label"> = {}): React.ComponentPropsWithoutRef<"label"> {
     return {
+      className: getClasses("label"),
       htmlFor: getInputId(name),
       defaultValue: serverFormInfo?.submittedFormData?.radioThing,
       ...attrs,
@@ -473,8 +496,9 @@ export function useValidatedInput(opts: {
   // their rendered validation errors
   function getErrorsAttrs({
     ...attrs
-  }: React.ComponentPropsWithoutRef<"div"> = {}): React.ComponentPropsWithoutRef<"div"> {
+  }: Record<string, string>): Record<string, string> {
     return {
+      className: "rvs-errors",
       id: getErrorsId(name),
       ...(showErrors ? { role: "alert" } : {}),
       ...attrs,
@@ -515,21 +539,20 @@ export function Field({ name, label }: FieldProps) {
       return null;
     }
     if (info.state === "validating") {
-      return <p>Validating...</p>;
+      return <p className="rvs-validating">Validating...</p>;
     }
     if (info.validity?.valid) {
-      return <p>✅</p>;
+      return null;
     }
     return <Errors {...getErrorsAttrs({})} messages={info.errorMessages} />;
   }
 
   return (
-    <div>
+    <>
       <label {...getLabelAttrs()}>
         {label}
         {ctx.formValidations[name].required ? "*" : null}
       </label>
-      <br />
       <input
         {...getInputAttrs({
           defaultValue: ctx.serverFormInfo?.submittedFormData?.[name],
@@ -538,7 +561,7 @@ export function Field({ name, label }: FieldProps) {
 
       {/* Display validation state */}
       <ValidationDisplay />
-    </div>
+    </>
   );
 }
 
@@ -548,12 +571,12 @@ export interface ErrorProps {
 }
 
 // Display errors for a given input
-export function Errors({ id, messages }: ErrorProps) {
+export function Errors({ id, messages, ...attrs }: ErrorProps) {
   if (!messages) {
     return null;
   }
   return (
-    <ul id={id} role="alert" style={{ color: "red" }}>
+    <ul {...attrs} id={id} role="alert">
       {Object.entries(messages).map(([validation, message]) => (
         <li key={validation}>🆘 {message}</li>
       ))}
