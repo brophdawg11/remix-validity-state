@@ -58,7 +58,7 @@ Semantically correct and accessible `<form>` markup is verbose. Any convenient f
 
 ### Demo App
 
-There's a Remix app in the `demo-app/` folder of this repo that you can run locally if you want to play around with it:
+There's a sample Remix app deployed to [rvs.fly.dev](https://rvs.fly.dev) that you can check out. This app source code is stored in this repository in the `demo-app/` folder, so you can also run it locally via:
 
 ```bash
 git clone git@github.com:brophdawg11/remix-validity-state.git
