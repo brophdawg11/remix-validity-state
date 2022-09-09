@@ -447,7 +447,7 @@ export function useValidatedInput(opts: {
   function getInputAttrs({
     onChange,
     ...attrs
-  }: React.ComponentPropsWithoutRef<"input"> = {}) {
+  }: React.ComponentPropsWithoutRef<"input"> = {}): React.ComponentPropsWithoutRef<"input"> {
     let validationAttrs = Object.entries(formValidations?.[name] || {}).reduce(
       (acc, [attr, value]) =>
         attr in builtInValidations
@@ -494,7 +494,7 @@ export function useValidatedInput(opts: {
   // their rendered validation errors
   function getErrorsAttrs({
     ...attrs
-  }: Record<string, string>): Record<string, string> {
+  }: React.ComponentPropsWithoutRef<"ul"> = {}): React.ComponentPropsWithoutRef<"ul"> {
     return {
       className: "rvs-errors",
       id: getErrorsId(name),
