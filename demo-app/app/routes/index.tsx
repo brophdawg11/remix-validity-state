@@ -50,8 +50,6 @@ const formValidations: FormValidations = {
 const customErrorMessages: ErrorMessages = {
   tooShort: (attrValue, name, value) =>
     `The ${name} field must be at least ${attrValue} characters long, but you have only entered ${value.length} characters`,
-  mustBeMatt: "This field must have a value of 'matt'",
-  mustBeBrophy: "This field must have a value of 'brophy'",
 };
 
 export const action: ActionFunction = async ({ request }) => {
