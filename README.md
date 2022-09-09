@@ -23,6 +23,7 @@
       - [useValidatedInput()](#usevalidatedinput)
       - [Styling](#styling)
   - [Not Yet Implemented](#not-yet-implemented)
+  - [Feedback + Contributing](#feedback--contributing)
 
 ## Design Goals
 
@@ -30,7 +31,7 @@ This library is built with the following design goals in mind:
 
 **1. Leverage built-in HTML input validation attributes _verbatim_**
 
-What ever happened to good old `<input required maxlength="30" />`? Far too often we reach for some custom implementation just to check that a value is not empty. Let's use what we have readily available when we can! That way we don't have to relearn something new. If you already know some of the HTML validation attributes...then you're ready to use this library.
+What ever happened to good old `<input required maxlength="30" />`? Far too often we reach for some custom validation library just to check that a value is not empty (and potentially ship a boatload of JS to the client in order to do so). Let's use what we have readily available when we can! That way we don't have to relearn something new. If you already know some of the HTML validation attributes...then you're ready to use this library.
 
 **2. Share validations between client and server**
 
@@ -46,12 +47,16 @@ Congrats for making it to bullet 4 and not leaving as soon as we mentioned the s
 
 **5. Provide limited abstractions to simplify form markup generation**
 
-Semantically correct and accessible `<form>` markup is verbose. Any convenient form library oughta provide _some_ wrapper components to make simple forms _easy_. However, any form library worth it's weight has to offer low level access to allow for true custom forms, and the ability to built custom abstractions for your application use-case. Therefore, any wrapper components will be little more than syntactix sugar on top of the lower level APIs.
+Semantically correct and accessible `<form>` markup is verbose. Any convenient form library oughta provide _some_ wrapper components to make simple forms _easy_. However, any form library worth it's weight has to offer low level access to allow for true custom forms, and the ability to built custom abstractions for your application use-case. Therefore, any wrapper components will be little more than syntactic sugar on top of the lower level APIs.
 
 ## Installation
 
 ```sh
-> npm install --save remix-validity-state
+> npm install remix-validity-state
+
+# or
+
+> yarn add remix-validity-state
 ```
 
 ## Usage
@@ -75,7 +80,7 @@ In order to share validations between server and client, we define a single obje
 
 ```js
 const formValidations = {
-  name: {
+  firstName: {
     required: true,
     maxLength: 50,
   },
@@ -117,7 +122,7 @@ In order to make these validations easily accessible, we provide them via contex
 </FormContext.Provider>
 ```
 
-The `<Field>` component is our wrapper that handles the `<label>`, `<input>`, and real-time error display.
+The `<Field>` component is our wrapper that handles the `<label>`, `<input>`, and real-time error display.  The `name` serves as the key and will look up our validation attributes from context and include them on the underlying `<input />`.
 
 #### Wire up server-side validations
 
@@ -140,7 +145,7 @@ export async function action({ request }) {
 
 #### Add your server action response to the `FormContext`
 
-When we validate on the server, we may get errors back that we didn't not catch during client-side validation (or we didn't run because JS hadn't yet loaded!). In order to render those, we can provide the response from `validateServerFormData` to our `FormContext` and it'll be used internally. The `serverFormInfo` also contains all of the submitted input values to be pre-populated into the inputs in a no-JS scenario.
+When we validate on the server, we may get errors back that we didn't catch during client-side validation (or we didn't run because JS hadn't yet loaded!). In order to render those, we can provide the response from `validateServerFormData` to our `FormContext` and it'll be used internally. The `serverFormInfo` also contains all of the submitted input values to be pre-populated into the inputs in a no-JS scenario.
 
 ```js
 export default function MyRemixRouteComponent() {
@@ -253,15 +258,15 @@ interface InputInfo {
   // custom async validations
   state: "idle" | "validating" | "done";
   // The current validity state of our input
-  validity?: ExtendedValidityState;
-  // Map of ExtendedValiditystate field => error message for all current errors
+  validity?: EnhancedValidityState;
+  // Map of EnhancedValidityState validation name -> error message for all current errors
   errorMessages?: Record<string, string>;
 }
 ```
 
 `validity` contains the current validation state of the input. Most notably `validity.valid`, tells you if the input is in a valid state.
 
-`errorMessages` is present if the input is invalid, and contains the error messages that should be displayed to the user (keyed by the field in `validity`):
+`errorMessages` is present if the input is invalid, and contains the error messages that should be displayed to the user (keyed by the validation name in `validity`):
 
 ```js
 {
@@ -288,10 +293,10 @@ Let's look at an example usage:
 </div>
 ```
 
-`useValidatedInput` can also be used instead of `FormContext` context for `formValidations` and `serverFormInfo` if necessary:
+`useValidatedInput` can also be used instead of `FormContext` for `formValidations` and `serverFormInfo` if necessary:
 
 ```js
-let { info } = iuseValidatedInput({
+let { info } = useValidatedInput({
   name: "emailAddress",
   formValidations,
   serverFormInfo,
@@ -328,9 +333,21 @@ This library aims to be pretty hands-off when it comes to styling, since every u
 
 ## Not Yet Implemented
 
-Currently, this library has only supports simple `<input>` elements. The following items are not currently supported, but are planned:
+Currently, this library only supports simple `<input>` elements. The following items are not currently supported, but are planned for any formal v1.0 release:
 
-- Radio Buttons
-- Checkboxes
-- Select
-- Textarea
+- [x] Error message interpolation
+- [ ] Radio Buttons
+- [ ] Checkboxes
+- [ ] Select
+- [ ] Textarea
+- [ ] Form level `info.valid` object (for disabling submit etc.)
+
+## Feedback + Contributing
+
+Feedback is absolutely welcomed!  This is a bit of a side hobby for me - as I've built plenty of forms over the years and I've never been particularly satisfied with the libraries available.  So this is somewhat of an attempt to build my ideal validation library - and I would love ideas that could improve it.  So please feel free to file issues, opens PRs, etc.
+
+Here's a few guidelines if you choose to contribute!
+
+* **Find a bug?**  Please file an Issue with a minimal reproduction.  Ideally a working example in stackblitz/codesandbox/etc., but sample code can suffice in many cases as well.
+* **Fix a bug?**  You rock 🙌 - please open a PR.
+* **Have a feature idea?**  Please open feature requests as a Discussion so we can use the forum there to come up with a solid API.
