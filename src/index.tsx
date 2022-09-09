@@ -210,6 +210,15 @@ const callAll =
   (...fns: (Function | undefined)[]) =>
   (...args: any[]) =>
     fns.forEach((fn) => fn?.(...args));
+const composeClassNames = (classes: Array<string | undefined>) =>
+  classes.filter((v) => v).join(" ");
+const omit = (
+  obj: Record<string, any>,
+  ...keys: string[]
+): Record<string, any> =>
+  Object.entries(obj)
+    .filter(([k]) => !keys.includes(k))
+    .reduce((acc, [k, v]) => Object.assign(acc, { [k]: v }), {});
 
 function getBaseValidityState(): ExtendedValidityState {
   return {
@@ -431,23 +440,22 @@ export function useValidatedInput(opts: {
     go().catch((e) => console.error("Error in validateInput useEffect", e));
   }, [dirty, touched, value, formValidations, name, serverFormInfo]);
 
-  function getClasses(type: "label" | "input") {
-    return [
+  function getClasses(type: "label" | "input", className?: string) {
+    return composeClassNames([
       `rvs-${type}`,
       showErrors ? `rvs-${type}--invalid` : "",
       validationState === "validating" ? `rvs-${type}--validating` : "",
       touched ? `rvs-${type}--touched` : "",
       dirty ? `rvs-${type}--dirty` : "",
-    ]
-      .filter((v) => v)
-      .join(" ");
+      className,
+    ]);
   }
 
   // Provide the caller a prop getter to be spread onto the <input>
   function getInputAttrs({
     onChange,
     ...attrs
-  }: React.ComponentPropsWithoutRef<"input"> = {}) {
+  }: React.ComponentPropsWithoutRef<"input"> = {}): React.ComponentPropsWithoutRef<"input"> {
     let validationAttrs = Object.entries(formValidations?.[name] || {}).reduce(
       (acc, [attr, value]) =>
         attr in builtInValidations
@@ -459,7 +467,7 @@ export function useValidatedInput(opts: {
       ref: inputRef,
       name,
       id: getInputId(name),
-      className: getClasses("input"),
+      className: getClasses("input", attrs.className),
       defaultValue: serverFormInfo?.submittedFormData?.lastName,
       onChange: callAll(onChange, (e: React.ChangeEvent<HTMLInputElement>) => {
         setDirty(true);
@@ -472,7 +480,7 @@ export function useValidatedInput(opts: {
           }
         : {}),
       ...validationAttrs,
-      ...attrs,
+      ...omit(attrs, "className"),
     };
 
     return inputAttrs;
@@ -483,10 +491,10 @@ export function useValidatedInput(opts: {
     ...attrs
   }: React.ComponentPropsWithoutRef<"label"> = {}): React.ComponentPropsWithoutRef<"label"> {
     return {
-      className: getClasses("label"),
+      className: getClasses("label", attrs.className),
       htmlFor: getInputId(name),
       defaultValue: serverFormInfo?.submittedFormData?.radioThing,
-      ...attrs,
+      ...omit(attrs, "className"),
     };
   }
 
@@ -494,12 +502,12 @@ export function useValidatedInput(opts: {
   // their rendered validation errors
   function getErrorsAttrs({
     ...attrs
-  }: Record<string, string>): Record<string, string> {
+  }: React.ComponentPropsWithoutRef<"ul"> = {}): React.ComponentPropsWithoutRef<"ul"> {
     return {
-      className: "rvs-errors",
+      className: composeClassNames(["rvs-errors", attrs.className]),
       id: getErrorsId(name),
       ...(showErrors ? { role: "alert" } : {}),
-      ...attrs,
+      ...omit(attrs, "className"),
     };
   }
 

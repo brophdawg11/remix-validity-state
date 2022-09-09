@@ -72,20 +72,20 @@ export const action: ActionFunction = async ({ request }) => {
   return redirect("/");
 };
 
+// This is a more complex example of skipping <Field/> in favor of manual
+// DOM construction
 function EmailAddress() {
   let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } =
-    useValidatedInput({
-      name: "emailAddress",
-    });
+    useValidatedInput({ name: "emailAddress" });
   return (
     <div>
       <label {...getLabelAttrs()}>Email Address*</label>
       <br />
-      <input {...getInputAttrs()} />
+      <input {...getInputAttrs({})} />
       {info.touched && info.errorMessages ? (
         <ul {...getErrorsAttrs()}>
-          {Object.values(info.errorMessages).map((msg) => (
-            <li key={msg}>🆘 {msg}</li>
+          {Object.entries(info.errorMessages).map(([validation, msg]) => (
+            <li key={validation}>🆘 {msg}</li>
           ))}
         </ul>
       ) : null}
@@ -159,7 +159,7 @@ export default function Index() {
           margin: 0;
           padding: 0;
         }
-        
+
         .rvs-errors {
           color: red;
           list-style: none;
@@ -241,7 +241,7 @@ export default function Index() {
               </span>
             </p>
             <div className="demo-input">
-              <Field name="emailAddress" label="Email Address" />
+              <EmailAddress />
             </div>
           </div>
 
