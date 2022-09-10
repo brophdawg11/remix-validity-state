@@ -38,7 +38,7 @@ export type ValidationAttribute =
  * Custom validation function
  */
 interface CustomValidation {
-  (val: string, attrValue?: string): boolean | Promise<boolean>;
+  (val: string, formData?: FormData): boolean | Promise<boolean>;
 }
 
 /**
@@ -204,8 +204,9 @@ function invariant(value: any, message?: string) {
   }
 }
 
-const getInputId = (name: string) => name;
-const getErrorsId = (name: string) => getInputId(name) + "-errors";
+const getInputId = (name: string, reactId: string) => `${name}--${reactId}`;
+const getErrorsId = (name: string, reactId: string) =>
+  `${name}-errors--${reactId}`;
 const callAll =
   (...fns: (Function | undefined)[]) =>
   (...args: any[]) =>
@@ -255,7 +256,8 @@ async function validateInput(
           ? inputEl?.validity[builtInValidation.domKey]
           : !builtInValidation.validate(value, String(attrValue));
       } else {
-        isInvalid = !(await attrValue(value));
+        let formData = inputEl?.form ? new FormData(inputEl.form) : undefined;
+        isInvalid = !(await attrValue(value, formData));
       }
       validity[builtInValidation?.domKey || attr] = isInvalid;
       validity.valid = validity.valid && !isInvalid;
@@ -322,14 +324,17 @@ function useOneTimeListener(
   }, [event, onEvent, ref, unlisten]);
 }
 
-// Handle validations for a single input
-export function useValidatedInput(opts: {
+interface UseValidatedInputOpts {
   name: string;
   formValidations?: FormValidations;
   errorMessages?: ErrorMessages;
   serverFormInfo?: ServerFormInfo;
-}) {
+}
+
+// Handle validations for a single input
+export function useValidatedInput(opts: UseValidatedInputOpts) {
   let ctx = React.useContext(FormContext);
+  let id = React.useId();
   let name = opts.name;
   let formValidations = opts.formValidations || ctx?.formValidations;
   let errorMessages =
@@ -364,7 +369,7 @@ export function useValidatedInput(opts: {
   let controller = React.useRef<AbortController | null>(null);
   let currentErrorMessages: Record<string, string> | undefined;
 
-  if (validity?.valid === false && errorMessages) {
+  if (validity?.valid === false) {
     currentErrorMessages = Object.entries(validity)
       .filter((e) => e[0] !== "valid" && e[1])
       .reduce((acc, [validation, valid]) => {
@@ -466,7 +471,7 @@ export function useValidatedInput(opts: {
     let inputAttrs = {
       ref: inputRef,
       name,
-      id: getInputId(name),
+      id: getInputId(name, id),
       className: getClasses("input", attrs.className),
       defaultValue: serverFormInfo?.submittedFormData?.lastName,
       onChange: callAll(onChange, (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -476,7 +481,7 @@ export function useValidatedInput(opts: {
       ...(showErrors
         ? {
             "aria-invalid": true,
-            "aria-errormessage": getErrorsId(attrs.name || name),
+            "aria-errormessage": getErrorsId(attrs.name || name, id),
           }
         : {}),
       ...validationAttrs,
@@ -492,7 +497,7 @@ export function useValidatedInput(opts: {
   }: React.ComponentPropsWithoutRef<"label"> = {}): React.ComponentPropsWithoutRef<"label"> {
     return {
       className: getClasses("label", attrs.className),
-      htmlFor: getInputId(name),
+      htmlFor: getInputId(name, id),
       defaultValue: serverFormInfo?.submittedFormData?.radioThing,
       ...omit(attrs, "className"),
     };
@@ -505,7 +510,7 @@ export function useValidatedInput(opts: {
   }: React.ComponentPropsWithoutRef<"ul"> = {}): React.ComponentPropsWithoutRef<"ul"> {
     return {
       className: composeClassNames(["rvs-errors", attrs.className]),
-      id: getErrorsId(name),
+      id: getErrorsId(name, id),
       ...(showErrors ? { role: "alert" } : {}),
       ...omit(attrs, "className"),
     };
@@ -526,21 +531,35 @@ export function useValidatedInput(opts: {
   };
 }
 
-export interface FieldProps {
-  name: string;
+export interface FieldProps
+  extends UseValidatedInputOpts,
+    Omit<React.ComponentPropsWithoutRef<"input">, "name"> {
   label: string;
 }
 
 // Syntactic sugar component to handle <label>/<input> and error displays
-export function Field({ name, label }: FieldProps) {
+export function Field({
+  name,
+  formValidations,
+  errorMessages,
+  serverFormInfo,
+  label,
+  ...inputAttrs
+}: FieldProps) {
   let ctx = React.useContext(FormContext);
-  invariant(ctx, "<Field> must be used inside a <FormContext.Provider>");
+  formValidations = formValidations || ctx?.formValidations;
+  serverFormInfo = serverFormInfo || ctx?.serverFormInfo;
+  errorMessages = errorMessages || ctx?.errorMessages;
+  invariant(
+    formValidations,
+    `No form validations found for <Field name="${name}">`
+  );
 
   let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } =
-    useValidatedInput({ name });
+    useValidatedInput({ name, formValidations, errorMessages, serverFormInfo });
 
   function ValidationDisplay() {
-    let showErrors = ctx?.serverFormInfo != null || info.touched;
+    let showErrors = serverFormInfo != null || info.touched;
     if (!showErrors || info.state === "idle") {
       return null;
     }
@@ -550,18 +569,19 @@ export function Field({ name, label }: FieldProps) {
     if (info.validity?.valid) {
       return null;
     }
-    return <Errors {...getErrorsAttrs({})} messages={info.errorMessages} />;
+    return <Errors {...getErrorsAttrs()} messages={info.errorMessages} />;
   }
 
   return (
     <>
       <label {...getLabelAttrs()}>
         {label}
-        {ctx.formValidations[name].required ? "*" : null}
+        {formValidations[name].required ? "*" : null}
       </label>
       <input
         {...getInputAttrs({
-          defaultValue: ctx.serverFormInfo?.submittedFormData?.[name],
+          defaultValue: serverFormInfo?.submittedFormData?.[name],
+          ...inputAttrs,
         })}
       />
 
@@ -584,7 +604,7 @@ export function Errors({ id, messages, ...attrs }: ErrorProps) {
   return (
     <ul {...attrs} id={id} role="alert">
       {Object.entries(messages).map(([validation, message]) => (
-        <li key={validation}>🆘 {message}</li>
+        <li key={validation}>{`🆘 ${message}`}</li>
       ))}
     </ul>
   );
