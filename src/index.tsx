@@ -38,7 +38,7 @@ export type ValidationAttribute =
  * Custom validation function
  */
 interface CustomValidation {
-  (val: string, attrValue?: string): boolean | Promise<boolean>;
+  (val: string, formData?: FormData): boolean | Promise<boolean>;
 }
 
 /**
@@ -256,7 +256,8 @@ async function validateInput(
           ? inputEl?.validity[builtInValidation.domKey]
           : !builtInValidation.validate(value, String(attrValue));
       } else {
-        isInvalid = !(await attrValue(value));
+        let formData = inputEl?.form ? new FormData(inputEl.form) : undefined;
+        isInvalid = !(await attrValue(value, formData));
       }
       validity[builtInValidation?.domKey || attr] = isInvalid;
       validity.valid = validity.valid && !isInvalid;
