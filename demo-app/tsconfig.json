@@ -13,6 +13,8 @@
     "paths": {
       "~/*": ["./app/*"]
     },
-    "noEmit": true
+    "noEmit": true,
+    "allowJs": true,
+    "forceConsistentCasingInFileNames": true
   }
 }
