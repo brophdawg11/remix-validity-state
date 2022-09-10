@@ -204,8 +204,9 @@ function invariant(value: any, message?: string) {
   }
 }
 
-const getInputId = (name: string) => name;
-const getErrorsId = (name: string) => getInputId(name) + "-errors";
+const getInputId = (name: string, reactId: string) => `${name}--${reactId}`;
+const getErrorsId = (name: string, reactId: string) =>
+  `${name}-errors--${reactId}`;
 const callAll =
   (...fns: (Function | undefined)[]) =>
   (...args: any[]) =>
@@ -330,6 +331,7 @@ export function useValidatedInput(opts: {
   serverFormInfo?: ServerFormInfo;
 }) {
   let ctx = React.useContext(FormContext);
+  let id = React.useId();
   let name = opts.name;
   let formValidations = opts.formValidations || ctx?.formValidations;
   let errorMessages =
@@ -466,7 +468,7 @@ export function useValidatedInput(opts: {
     let inputAttrs = {
       ref: inputRef,
       name,
-      id: getInputId(name),
+      id: getInputId(name, id),
       className: getClasses("input", attrs.className),
       defaultValue: serverFormInfo?.submittedFormData?.lastName,
       onChange: callAll(onChange, (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -476,7 +478,7 @@ export function useValidatedInput(opts: {
       ...(showErrors
         ? {
             "aria-invalid": true,
-            "aria-errormessage": getErrorsId(attrs.name || name),
+            "aria-errormessage": getErrorsId(attrs.name || name, id),
           }
         : {}),
       ...validationAttrs,
@@ -492,7 +494,7 @@ export function useValidatedInput(opts: {
   }: React.ComponentPropsWithoutRef<"label"> = {}): React.ComponentPropsWithoutRef<"label"> {
     return {
       className: getClasses("label", attrs.className),
-      htmlFor: getInputId(name),
+      htmlFor: getInputId(name, id),
       defaultValue: serverFormInfo?.submittedFormData?.radioThing,
       ...omit(attrs, "className"),
     };
@@ -505,7 +507,7 @@ export function useValidatedInput(opts: {
   }: React.ComponentPropsWithoutRef<"ul"> = {}): React.ComponentPropsWithoutRef<"ul"> {
     return {
       className: composeClassNames(["rvs-errors", attrs.className]),
-      id: getErrorsId(name),
+      id: getErrorsId(name, id),
       ...(showErrors ? { role: "alert" } : {}),
       ...omit(attrs, "className"),
     };
