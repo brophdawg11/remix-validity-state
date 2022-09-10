@@ -50,6 +50,8 @@ const formValidations: FormValidations = {
 const customErrorMessages: ErrorMessages = {
   tooShort: (attrValue, name, value) =>
     `The ${name} field must be at least ${attrValue} characters long, but you have only entered ${value.length} characters`,
+  uniqueEmail: (attrValue, name, value) =>
+    `The email address "${value}" is already in use!`,
 };
 
 export const action: ActionFunction = async ({ request }) => {
