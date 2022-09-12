@@ -1,28 +1,35 @@
-import * as React from "react";
+import { Form, useActionData } from "@remix-run/react";
 import type { ActionFunction } from "@remix-run/server-runtime";
 import { json, redirect } from "@remix-run/server-runtime";
-import { Form, useActionData } from "@remix-run/react";
+import * as React from "react";
 import type {
   ErrorMessages,
-  FormValidations,
   ServerFormInfo,
+  Validations,
 } from "remix-validity-state";
-import { useValidatedInput } from "remix-validity-state";
 import {
-  FormContext,
   Field,
+  FormContextProvider,
+  useValidatedInput,
   validateServerFormData,
 } from "remix-validity-state";
 
+type MyFormValidations = {
+  firstName: Validations;
+  middleInitial: Validations;
+  lastName: Validations;
+  emailAddress: Validations;
+};
+
 type ActionData = {
-  serverFormInfo: ServerFormInfo;
+  serverFormInfo: ServerFormInfo<MyFormValidations>;
 };
 
 // Validations for our entire form, composed of raw HTML validation attributes
 // to be spread directly onto <input>, as well as custo validations that will
 // run both client and server side.
 // Specified in an object here so they can be leveraged for server-side validation
-const formValidations: FormValidations = {
+const formValidations: MyFormValidations = {
   firstName: {
     // Standard HTML validations have primitives as their value
     required: true,
@@ -76,7 +83,7 @@ export const action: ActionFunction = async ({ request }) => {
 // DOM construction
 function EmailAddress() {
   let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } =
-    useValidatedInput({ name: "emailAddress" });
+    useValidatedInput<MyFormValidations>({ name: "emailAddress" });
   return (
     <div>
       <label {...getLabelAttrs()}>Email Address*</label>
@@ -191,11 +198,14 @@ export default function Index() {
         .
       </p>
       <hr />
-      <FormContext.Provider
+      <FormContextProvider
         value={{
           formValidations,
           errorMessages: customErrorMessages,
-          serverFormInfo: actionData?.serverFormInfo,
+          // TODO: Can this case go away?  Seems to be coming from the
+          // serialization logic in the useActionData generic
+          serverFormInfo:
+            actionData?.serverFormInfo as ServerFormInfo<MyFormValidations>,
         }}
       >
         <Form method="post" autoComplete="off" ref={formRef}>
@@ -247,7 +257,7 @@ export default function Index() {
 
           <button type="submit">Submit</button>
         </Form>
-      </FormContext.Provider>
+      </FormContextProvider>
     </div>
   );
 }
