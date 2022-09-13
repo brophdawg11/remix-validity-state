@@ -13,8 +13,8 @@
     - [Demo App](#demo-app)
     - [Getting Started](#getting-started)
       - [Define your form validations](#define-your-form-validations)
-      - [Provide your validations via `FormContext`](#provide-your-validations-via-formcontext)
-      - [Render `<Field>` Components inside your `FormContext`](#render-field-components-inside-your-formcontext)
+      - [Provide your validations via `FormContextProvider`](#provide-your-validations-via-formcontextprovider)
+      - [Render `<Field>` Components inside your `FormContextProvider`](#render-field-components-inside-your-formcontextprovider)
       - [Wire up server-side validations](#wire-up-server-side-validations)
       - [Add your server action response to the `FormContext`](#add-your-server-action-response-to-the-formcontext)
       - [That's it!](#thats-it)
@@ -24,6 +24,7 @@
       - [Error Messages](#error-messages)
       - [useValidatedInput()](#usevalidatedinput)
       - [Styling](#styling)
+      - [Typescript](#typescript)
   - [Not Yet Implemented](#not-yet-implemented)
   - [Feedback + Contributing](#feedback--contributing)
 
