@@ -5,9 +5,16 @@ import * as React from "react";
 
 export type PartialRecord<K extends keyof any, T> = Partial<Record<K, T>>;
 
+// Remove readonly modifiers from existing types to make them mutable
 type Mutable<T> = {
   -readonly [P in keyof T]: T[P];
 };
+
+// Restrict object keys to strings, and don't permit number/Symbol
+type KeyOfString<T> = Extract<keyof T, string>;
+
+// Extract the value type for an object
+type ValueOf<T> = T[keyof T];
 
 /**
  * Validation attributes built-in to the browser
@@ -37,14 +44,14 @@ export type ValidationAttribute =
 /**
  * Custom validation function
  */
-interface CustomValidation {
+export interface CustomValidation {
   (val: string, formData?: FormData): boolean | Promise<boolean>;
 }
 
 /**
  * Union type for both built-in and custom validations
  */
-type Validations =
+export type Validations =
   | {
       [thing in ValidationAttribute]?: InputValidations[thing];
     }
@@ -58,7 +65,8 @@ type MutableValidityState = Mutable<ValidityState>;
 /**
  * Extended ValidityState which weill also contain our custom validations
  */
-type ExtendedValidityState = MutableValidityState & Record<string, boolean>;
+export type ExtendedValidityState = MutableValidityState &
+  Record<string, boolean>;
 
 /**
  * The DOM ValidityState key representing a validation error
@@ -90,9 +98,9 @@ export interface InputInfo {
 }
 
 // Server-side only (currently) - validate all specified inputs in the formData
-export type ServerFormInfo = {
+export type ServerFormInfo<T extends FormValidations = {}> = {
   submittedFormData: Record<string, string>;
-  inputs: FormInfo;
+  inputs: Record<KeyOfString<T>, InputInfo>;
   valid: boolean;
 };
 
@@ -106,10 +114,10 @@ interface Validator {
   errorMessage: ErrorMessage;
 }
 
-interface FormContextObject {
-  formValidations: FormValidations;
+interface FormContextObject<T extends FormValidations> {
+  formValidations: T;
   errorMessages?: ErrorMessages;
-  serverFormInfo?: ServerFormInfo;
+  serverFormInfo?: ServerFormInfo<T>;
   requiredNotation?: string;
 }
 //#endregion
@@ -191,8 +199,6 @@ const builtInValidityToAttrMapping: Record<string, ValidationAttribute> =
     {}
   );
 
-export const FormContext = React.createContext<FormContextObject | null>(null);
-
 function invariant(value: boolean, message?: string): asserts value;
 function invariant<T>(
   value: T | null | undefined,
@@ -267,19 +273,25 @@ async function validateInput(
 }
 
 // Perform all validations for a submitted form on the server
-export async function validateServerFormData(
+export async function validateServerFormData<T extends FormValidations>(
   formData: FormData,
-  formValidations: FormValidations
-): Promise<ServerFormInfo> {
+  formValidations: T
+): Promise<ServerFormInfo<T>> {
   // Echo back submitted form data for input pre-population
   const submittedFormData = Array.from(formData.entries()).reduce(
     (acc, e) => Object.assign(acc, { [e[0]]: e[1] }),
     {}
   );
-  const inputs: Record<string, InputInfo> = {};
+
+  const inputs = {} as Record<KeyOfString<T>, InputInfo>;
   let valid = true;
+  let entries = Object.entries(formValidations) as Array<
+    [KeyOfString<T>, ValueOf<T>]
+  >;
   await Promise.all(
-    Object.entries(formValidations).map(async ([name, inputValidations]) => {
+    entries.map(async (e) => {
+      let name = e[0];
+      let inputValidations = e[1];
       const value = formData.get(name);
       if (typeof value === "string") {
         let validity = await validateInput(null, value, inputValidations);
@@ -299,7 +311,27 @@ export async function validateServerFormData(
 //#endregion
 
 ////////////////////////////////////////////////////////////////////////////////
-//#region Components + Hooks
+//#region Contexts + Components + Hooks
+
+export const FormContext =
+  React.createContext<FormContextObject<FormValidations> | null>(null);
+
+// Shout out for this nifty little approach!
+// https://www.hipsterbrown.com/musings/musing/react-context-with-generics/
+export function FormContextProvider<T extends FormValidations>({
+  children,
+  value,
+}: React.PropsWithChildren<{ value: FormContextObject<T> }>) {
+  return <FormContext.Provider value={value}>{children}</FormContext.Provider>;
+}
+
+export function useFormContext<T extends FormValidations>() {
+  const context = React.useContext<FormContextObject<T>>(
+    FormContext as unknown as React.Context<FormContextObject<T>>
+  );
+  invariant(context, "useFormContext must be used under FormContextProvider");
+  return context;
+}
 
 // Listen/Unlisten for the given event and call at most one time
 function useOneTimeListener(
@@ -324,16 +356,18 @@ function useOneTimeListener(
   }, [event, onEvent, ref, unlisten]);
 }
 
-interface UseValidatedInputOpts {
-  name: string;
-  formValidations?: FormValidations;
+interface UseValidatedInputOpts<T extends FormValidations> {
+  name: KeyOfString<T>;
+  formValidations?: T;
   errorMessages?: ErrorMessages;
-  serverFormInfo?: ServerFormInfo;
+  serverFormInfo?: ServerFormInfo<T>;
 }
 
 // Handle validations for a single input
-export function useValidatedInput(opts: UseValidatedInputOpts) {
-  let ctx = React.useContext(FormContext);
+export function useValidatedInput<T extends FormValidations>(
+  opts: UseValidatedInputOpts<T>
+) {
+  let ctx = useFormContext<T>();
   let id = React.useId();
   let name = opts.name;
   let formValidations = opts.formValidations || ctx?.formValidations;
@@ -344,7 +378,9 @@ export function useValidatedInput(opts: UseValidatedInputOpts) {
           ...opts.errorMessages,
         }
       : undefined;
-  let serverFormInfo = opts.serverFormInfo || ctx?.serverFormInfo;
+  // TODO: Can this cast from context be avoided?
+  let serverFormInfo =
+    opts.serverFormInfo || (ctx?.serverFormInfo as ServerFormInfo<T>);
 
   invariant(
     formValidations !== undefined,
@@ -531,22 +567,22 @@ export function useValidatedInput(opts: UseValidatedInputOpts) {
   };
 }
 
-export interface FieldProps
-  extends UseValidatedInputOpts,
+export interface FieldProps<T extends FormValidations>
+  extends UseValidatedInputOpts<T>,
     Omit<React.ComponentPropsWithoutRef<"input">, "name"> {
   label: string;
 }
 
 // Syntactic sugar component to handle <label>/<input> and error displays
-export function Field({
+export function Field<T extends FormValidations>({
   name,
   formValidations,
   errorMessages,
   serverFormInfo,
   label,
   ...inputAttrs
-}: FieldProps) {
-  let ctx = React.useContext(FormContext);
+}: FieldProps<T>) {
+  let ctx = useFormContext<T>();
   formValidations = formValidations || ctx?.formValidations;
   serverFormInfo = serverFormInfo || ctx?.serverFormInfo;
   errorMessages = errorMessages || ctx?.errorMessages;
