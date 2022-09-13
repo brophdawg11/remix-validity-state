@@ -2,7 +2,9 @@
 
 `remix-validity-state` is a small [React](https://reactjs.org/) form validation library that aims to embrace HTML input validation and play nicely with [Remix](https://remix.run) primitives.
 
-> ⚠️ **Note: This library is in very much in an alpha stage. Feedback is welcome, however production usage is strongly discouraged.**
+> **Warning**
+>
+> This library is in very much in an alpha stage. Feedback is welcome, however production usage is strongly discouraged.
 
 - [Remix Validity State](#remix-validity-state)
   - [Design Goals](#design-goals)
@@ -101,34 +103,38 @@ const formValidations = {
 
 This allows us to directly render these attributes onto our HTML inputs via something like `<input name="firstName" {...formValidations.firstName} />`
 
-#### Provide your validations via `FormContext`
+#### Provide your validations via `FormContextProvider`
 
-In order to make these validations easily accessible, we provide them via context that should wrap your underlying `<form>`:
+In order to make these validations easily accessible, we provide them via context that should wrap your underlying `<form>`. We do this with a wrapper component around the actual context for better TypeScript inference.
 
 ```jsx
-<FormContext.Provider value={{ formValidations }}>
+import { FormContextProvider } from 'remix-validity-state'
+
+<FormContextProvider value={{ formValidations }}>
   {/* Your <form> goes in here */}
-</FormContext.Provider
+</FormContextProvider
 ```
 
-#### Render `<Field>` Components inside your `FormContext`
+#### Render `<Field>` Components inside your `FormContextProvider`
 
 ```jsx
-<FormContext.Provider value={{ formValidations }}>
+<FormContextProvider value={{ formValidations }}>
   <Field name="firstName" label="First Name" />
   <Field name="middleInitial" label="Middle Name" />
   <Field name="lastName" label="Last Name" />
   <Field name="emailAddress" label="Email Address" />
-</FormContext.Provider>
+</FormContextProvider>
 ```
 
-The `<Field>` component is our wrapper that handles the `<label>`, `<input>`, and real-time error display.  The `name` serves as the key and will look up our validation attributes from context and include them on the underlying `<input />`.
+The `<Field>` component is our wrapper that handles the `<label>`, `<input>`, and real-time error display. The `name` serves as the key and will look up our validation attributes from context and include them on the underlying `<input />`.
 
 #### Wire up server-side validations
 
 In Remix, your submit your forms to an `action` which receives the `FormData`. In your action, call `validateServerFormData` with the `formData` and your previously defined `formValidations`:
 
 ```js
+import { validateServerFormData } from "remix-validity-state";
+
 export async function action({ request }) {
   const formData = await request.formData();
   const serverFormInfo = await validateServerFormData(
@@ -148,10 +154,12 @@ export async function action({ request }) {
 When we validate on the server, we may get errors back that we didn't catch during client-side validation (or we didn't run because JS hadn't yet loaded!). In order to render those, we can provide the response from `validateServerFormData` to our `FormContext` and it'll be used internally. The `serverFormInfo` also contains all of the submitted input values to be pre-populated into the inputs in a no-JS scenario.
 
 ```js
+import { Field, FormContextProvider } from "remix-validity-state";
+
 export default function MyRemixRouteComponent() {
   let actionData = useActionData();
   return (
-    <FormContext.Provider
+    <FormContextProvider
       value={{
         formValidations,
         serverFormInfo: actionData?.serverFormInfo,
@@ -161,7 +169,7 @@ export default function MyRemixRouteComponent() {
       <Field name="middleInitial" label="Middle Name" />
       <Field name="lastName" label="Last Name" />
       <Field name="emailAddress" label="Email Address" />
-    </FormContext.Provider>
+    </FormContextProvider>
   );
 }
 ```
@@ -219,7 +227,7 @@ const formValidations: FormValidations = {
 
 #### Error Messages
 
-Basic error messaging is handled out of the box by `<Field>` for built-in HTML validations. If you are using custom validations, or if you want to override the built-in messaging, you can provide custom error messages through the `<FormContext>`. Custom error messages can either be a static string, or a function that receives the attribute value (built-in validations only), the input name, and the input value:
+Basic error messaging is handled out of the box by `<Field>` for built-in HTML validations. If you are using custom validations, or if you want to override the built-in messaging, you can provide custom error messages through the `<FormContextProvider>`. Custom error messages can either be a static string, or a function that receives the attribute value (built-in validations only), the input name, and the input value:
 
 ```jsx
 const errorMessages = {
@@ -231,9 +239,9 @@ const errorMessages = {
     `The email address ${value} is already taken`,
 };
 
-<FormContext.Provider value={{ formValidations, errorMessages }}>
+<FormContextProvider value={{ formValidations, errorMessages }}>
   ...
-</FormContext.Provider>;
+</FormContextProvider>;
 ```
 
 #### useValidatedInput()
@@ -293,7 +301,7 @@ Let's look at an example usage:
 </div>
 ```
 
-`useValidatedInput` can also be used instead of `FormContext` for `formValidations` and `serverFormInfo` if necessary:
+`useValidatedInput` can also be used instead of `FormContextProvider` for `formValidations` and `serverFormInfo` if necessary:
 
 ```js
 let { info } = useValidatedInput({
@@ -331,6 +339,36 @@ This library aims to be pretty hands-off when it comes to styling, since every u
 - `rvs-validating` - present on the `<p>` tag that displays a `Validating...` message during async validation
 - `rvs-errors` - added to the built-in errors list `<ul>` element
 
+#### Typescript
+
+Now, I'm no TypeScript wizard but I have tried to make this library TypeScript friendly, and even got some good feature requests early on (thanks Kent for #7 and #9!). Hopefully over time the types will improve further, but at the moment here's the best way to get type safety and inference.
+
+```ts
+// Define a type for your validations
+type MyValidations = {
+  firstName: Validations;
+  lastName: Validations;
+}
+
+// Create your typed validations
+const formValidations: MyValidations = {
+  firstName: { required: true },
+  lastName: { required: true },
+}
+
+// When passing formValidations to context./hooks it will automatically infer
+// your types:
+<FormContextProvider value={{ formValidations }}>
+useValidatedInput({ name: "firstName", formValidations });
+
+// Or if you are using useValidatedInput inside the context, you'll need to
+// use the generic signature:
+useValidatedInput<MyValidations>({ name: 'firstName' });
+
+// Finally, the return type of validateServerFormData will have serverFormInfo.inputs
+// properly typed with your fields
+```
+
 ## Not Yet Implemented
 
 Currently, this library only supports simple `<input>` elements. The following items are not currently supported, but are planned for any formal v1.0 release:
@@ -344,10 +382,10 @@ Currently, this library only supports simple `<input>` elements. The following i
 
 ## Feedback + Contributing
 
-Feedback is absolutely welcomed!  This is a bit of a side hobby for me - as I've built plenty of forms over the years and I've never been particularly satisfied with the libraries available.  So this is somewhat of an attempt to build my ideal validation library - and I would love ideas that could improve it.  So please feel free to file issues, opens PRs, etc.
+Feedback is absolutely welcomed! This is a bit of a side hobby for me - as I've built plenty of forms over the years and I've never been particularly satisfied with the libraries available. So this is somewhat of an attempt to build my ideal validation library - and I would love ideas that could improve it. So please feel free to file issues, opens PRs, etc.
 
 Here's a few guidelines if you choose to contribute!
 
-* **Find a bug?**  Please file an Issue with a minimal reproduction.  Ideally a working example in stackblitz/codesandbox/etc., but sample code can suffice in many cases as well.
-* **Fix a bug?**  You rock 🙌 - please open a PR.
-* **Have a feature idea?**  Please open feature requests as a Discussion so we can use the forum there to come up with a solid API.
+- **Find a bug?** Please file an Issue with a minimal reproduction. Ideally a working example in stackblitz/codesandbox/etc., but sample code can suffice in many cases as well.
+- **Fix a bug?** You rock 🙌 - please open a PR.
+- **Have a feature idea?** Please open feature requests as a Discussion so we can use the forum there to come up with a solid API.
