@@ -249,6 +249,7 @@ async function validateInput(
   inputEl: HTMLInputElement | null,
   value: string,
   inputValidations: Validations
+  formData: FormData | null
 ): Promise<ExtendedValidityState> {
   let validity = getBaseValidityState();
   await Promise.all(
@@ -294,7 +295,7 @@ export async function validateServerFormData<T extends FormValidations>(
       let inputValidations = e[1];
       const value = formData.get(name);
       if (typeof value === "string") {
-        let validity = await validateInput(null, value, inputValidations);
+        let validity = await validateInput(null, value, inputValidations, formData);
         // Always assume inputs have been modified during SSR validation
         inputs[name] = {
           touched: true,
@@ -470,6 +471,7 @@ export function useValidatedInput<T extends FormValidations>(
         inputRef.current,
         value,
         inputValidations
+        inputRef.current.form ? new FormData(inputRef.current.form) : null
       );
       if (localController.signal.aborted) {
         return;
