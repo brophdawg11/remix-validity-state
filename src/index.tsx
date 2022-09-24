@@ -98,11 +98,17 @@ export interface InputInfo {
 }
 
 // Server-side only (currently) - validate all specified inputs in the formData
-export type ServerFormInfo<T extends FormValidations = {}> = {
-  submittedFormData: Record<string, string>;
-  inputs: Record<KeyOfString<T>, InputInfo>;
-  valid: boolean;
-};
+export type ServerFormInfo<T extends FormValidations = {}> =
+  | {
+      submittedFormData: Record<string, string>;
+      inputs: Record<KeyOfString<T>, InputInfo>;
+      valid: false;
+    }
+  | {
+      submittedFormData: Record<KeyOfString<T>, string>;
+      inputs: Record<KeyOfString<T>, InputInfo>;
+      valid: true;
+    };
 
 /**
  * Validator to link HTML attribute to ValidityState key as well as provide an
