@@ -120,6 +120,13 @@ interface FormContextObject<T extends FormValidations> {
   serverFormInfo?: ServerFormInfo<T>;
   requiredNotation?: string;
 }
+
+/**
+ * See https://github.com/reach/reach-ui/blob/v0.17.0/packages/utils/src/types.ts#L9
+ */
+type AssignableRef<ValueType> =
+  | React.RefCallback<ValueType>
+  | React.MutableRefObject<ValueType | null>;
 //#endregion
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -208,6 +215,33 @@ function invariant(value: any, message?: string) {
   if (value === false || value === null || typeof value === "undefined") {
     throw new Error(message);
   }
+}
+
+function assignRef<RefValueType = any>(
+  ref: AssignableRef<RefValueType> | null | undefined,
+  value: any
+) {
+  if (ref == null) return;
+  if (typeof ref === "function") {
+    ref(value);
+  } else {
+    try {
+      ref.current = value;
+    } catch (error) {
+      throw new Error(`Cannot assign value "${value}" to ref "${ref}"`);
+    }
+  }
+}
+
+function useComposedRefs<RefValueType = any>(
+  ...refs: (AssignableRef<RefValueType> | null | undefined)[]
+): React.RefCallback<RefValueType> {
+  return React.useCallback((node) => {
+    for (let ref of refs) {
+      assignRef(ref, node);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, refs);
 }
 
 const getInputId = (name: string, reactId: string) => `${name}--${reactId}`;
@@ -361,6 +395,9 @@ interface UseValidatedInputOpts<T extends FormValidations> {
   formValidations?: T;
   errorMessages?: ErrorMessages;
   serverFormInfo?: ServerFormInfo<T>;
+  ref?:
+    | React.ForwardedRef<HTMLInputElement | null | undefined>
+    | React.Ref<HTMLInputElement | null | undefined>;
 }
 
 // Handle validations for a single input
@@ -393,6 +430,7 @@ export function useValidatedInput<T extends FormValidations>(
     serverFormInfo
   );
   let inputRef = React.useRef<HTMLInputElement>(null);
+  let composedRef = useComposedRefs(inputRef, opts.ref);
   let [value, setValue] = React.useState("");
   let [dirty, setDirty] = React.useState<boolean>(wasSubmitted);
   let [touched, setTouched] = React.useState<boolean>(wasSubmitted);
@@ -505,7 +543,7 @@ export function useValidatedInput<T extends FormValidations>(
       {}
     );
     let inputAttrs = {
-      ref: inputRef,
+      ref: composedRef,
       name,
       id: getInputId(name, id),
       className: getClasses("input", attrs.className),
@@ -521,7 +559,7 @@ export function useValidatedInput<T extends FormValidations>(
           }
         : {}),
       ...validationAttrs,
-      ...omit(attrs, "className"),
+      ...omit(attrs, "className", "ref"),
     };
 
     return inputAttrs;
