@@ -507,7 +507,7 @@ export function useValidatedInput<T extends FormValidations>(
       className: getClasses("input", attrs.className),
       defaultValue: serverFormInfo?.submittedFormData?.lastName,
       onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
-        onChange && onChange(event);
+        onChange?.(event);
         if (!event.defaultPrevented) {
           setDirty(true);
           setValue(event.target.value);
