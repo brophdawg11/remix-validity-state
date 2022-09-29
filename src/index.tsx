@@ -248,7 +248,8 @@ function getBaseValidityState(): ExtendedValidityState {
 async function validateInput(
   inputEl: HTMLInputElement | null,
   value: string,
-  inputValidations: Validations
+  inputValidations: Validations,
+  formData?: FormData
 ): Promise<ExtendedValidityState> {
   let validity = getBaseValidityState();
   await Promise.all(
@@ -262,8 +263,11 @@ async function validateInput(
           ? inputEl?.validity[builtInValidation.domKey]
           : !builtInValidation.validate(value, String(attrValue));
       } else {
-        let formData = inputEl?.form ? new FormData(inputEl.form) : undefined;
-        isInvalid = !(await attrValue(value, formData));
+        // During SSR we get this passed in, client-side we can lazily generate
+        // only for custom validations
+        let currentFormData =
+          formData || (inputEl?.form ? new FormData(inputEl.form) : undefined);
+        isInvalid = !(await attrValue(value, currentFormData));
       }
       validity[builtInValidation?.domKey || attr] = isInvalid;
       validity.valid = validity.valid && !isInvalid;
@@ -294,7 +298,12 @@ export async function validateServerFormData<T extends FormValidations>(
       let inputValidations = e[1];
       const value = formData.get(name);
       if (typeof value === "string") {
-        let validity = await validateInput(null, value, inputValidations);
+        let validity = await validateInput(
+          null,
+          value,
+          inputValidations,
+          formData
+        );
         // Always assume inputs have been modified during SSR validation
         inputs[name] = {
           touched: true,
