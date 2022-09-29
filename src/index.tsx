@@ -217,9 +217,9 @@ function invariant(value: any, message?: string) {
   }
 }
 
-function assignRef<RefValueType = any>(
+function assignRef<RefValueType = unknown>(
   ref: AssignableRef<RefValueType> | null | undefined,
-  value: any
+  value: unknown
 ) {
   if (ref == null) return;
   if (typeof ref === "function") {
@@ -233,7 +233,7 @@ function assignRef<RefValueType = any>(
   }
 }
 
-function useComposedRefs<RefValueType = any>(
+function useComposedRefs<RefValueType = unknown>(
   ...refs: (AssignableRef<RefValueType> | null | undefined)[]
 ): React.RefCallback<RefValueType> {
   return React.useCallback((node) => {
