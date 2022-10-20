@@ -430,8 +430,7 @@ export function useValidatedInput<T extends FormValidations>(
     serverFormInfo
   );
   let inputRef = React.useRef<HTMLInputElement>(null);
-  let userRef = React.useRef<React.RefObject<HTMLInputElement>>(null);
-  let composedRef = useComposedRefs(inputRef, userRef.current);
+  let composedRef = useComposedRefs(inputRef, opts.ref);
   let [value, setValue] = React.useState("");
   let [dirty, setDirty] = React.useState<boolean>(wasSubmitted);
   let [touched, setTouched] = React.useState<boolean>(wasSubmitted);
@@ -534,9 +533,8 @@ export function useValidatedInput<T extends FormValidations>(
   // Provide the caller a prop getter to be spread onto the <input>
   function getInputAttrs({
     onChange,
-    ref,
     ...attrs
-  }: React.ComponentProps<"input"> = {}): React.ComponentProps<"input"> {
+  }: React.ComponentPropsWithoutRef<"input"> = {}): React.ComponentPropsWithoutRef<"input"> {
     let validationAttrs = Object.entries(formValidations?.[name] || {}).reduce(
       (acc, [attr, value]) =>
         attr in builtInValidations
@@ -544,9 +542,6 @@ export function useValidatedInput<T extends FormValidations>(
           : acc,
       {}
     );
-    if (ref && userRef.current !== ref) {
-      assignRef(userRef, ref);
-    }
     let inputAttrs = {
       ref: composedRef,
       name,
@@ -660,7 +655,7 @@ export function Field<T extends FormValidations>({
       <input
         {...getInputAttrs({
           defaultValue: serverFormInfo?.submittedFormData?.[name],
-          ...omit(inputAttrs, "ref"),
+          ...inputAttrs,
         })}
       />
 
