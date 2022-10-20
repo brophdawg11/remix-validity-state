@@ -118,7 +118,6 @@ interface FormContextObject<T extends FormValidations> {
   formValidations: T;
   errorMessages?: ErrorMessages;
   serverFormInfo?: ServerFormInfo<T>;
-  requiredNotation?: string;
 }
 
 /**
@@ -219,7 +218,7 @@ function invariant(value: any, message?: string) {
 
 function assignRef<RefValueType = unknown>(
   ref: AssignableRef<RefValueType> | null | undefined,
-  value: unknown
+  value: RefValueType
 ) {
   if (ref == null) return;
   if (typeof ref === "function") {
@@ -368,12 +367,16 @@ export function FormContextProvider<T extends FormValidations>({
   return <FormContext.Provider value={value}>{children}</FormContext.Provider>;
 }
 
-export function useFormContext<T extends FormValidations>() {
+export function useOptionalFormContext<
+  T extends FormValidations
+>(): FormContextObject<T> | null {
   const context = React.useContext<FormContextObject<T>>(
     FormContext as unknown as React.Context<FormContextObject<T>>
   );
-  invariant(context, "useFormContext must be used under FormContextProvider");
-  return context;
+  if (context) {
+    return context;
+  }
+  return null;
 }
 
 // Listen/Unlisten for the given event and call at most one time
@@ -413,7 +416,7 @@ interface UseValidatedInputOpts<T extends FormValidations> {
 export function useValidatedInput<T extends FormValidations>(
   opts: UseValidatedInputOpts<T>
 ) {
-  let ctx = useFormContext<T>();
+  let ctx = useOptionalFormContext<T>();
   let id = React.useId();
   let name = opts.name;
   let formValidations = opts.formValidations || ctx?.formValidations;
@@ -629,7 +632,7 @@ export function Field<T extends FormValidations>({
   label,
   ...inputAttrs
 }: FieldProps<T>) {
-  let ctx = useFormContext<T>();
+  let ctx = useOptionalFormContext<T>();
   formValidations = formValidations || ctx?.formValidations;
   serverFormInfo = serverFormInfo || ctx?.serverFormInfo;
   errorMessages = errorMessages || ctx?.errorMessages;
