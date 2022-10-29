@@ -3,7 +3,6 @@
   "version": "0.6.0",
   "author": "matt@brophy.org",
   "description": "A Remix form validation library extending on the HTML ValidityState API",
-  "browser": "./dist/remix-validity-state.umd.js",
   "main": "./dist/remix-validity-state.cjs.js",
   "module": "./dist/remix-validity-state.esm.js",
   "types": "./dist/index.d.ts",

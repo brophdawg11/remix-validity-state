@@ -29,13 +29,6 @@ export default function rollup() {
       input: `${SOURCE_DIR}/index.tsx`,
       output: [
         {
-          file: getOutputFile(packageJson.browser),
-          format: "umd",
-          name: "RemixValidityState",
-          globals: { react: "React" },
-          ...output,
-        },
-        {
           file: getOutputFile(packageJson.main),
           format: "cjs",
           ...output,
@@ -46,13 +39,13 @@ export default function rollup() {
           ...output,
         },
       ],
-      external: ["react"],
+      external: ["react", "@babel/runtime/helpers/extends"],
       plugins: [
         babel({
           exclude: /node_modules/,
           babelHelpers: "runtime",
           presets: [
-            ["@babel/preset-env", { loose: true }],
+            ["@babel/preset-env", { loose: true, debug: true }],
             "@babel/preset-react",
             "@babel/preset-typescript",
           ],
