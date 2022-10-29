@@ -62,6 +62,10 @@ Semantically correct and accessible `<form>` markup is verbose. Any convenient f
 > yarn add remix-validity-state
 ```
 
+> **Info**
+>
+> This library is bundled for modern browsers (see `.browserslistrc`). If you need to support older browsers you may need to configure your build process accordingly.
+
 ## Usage
 
 ### Demo App
