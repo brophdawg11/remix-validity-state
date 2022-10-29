@@ -246,10 +246,6 @@ function useComposedRefs<RefValueType = unknown>(
 const getInputId = (name: string, reactId: string) => `${name}--${reactId}`;
 const getErrorsId = (name: string, reactId: string) =>
   `${name}-errors--${reactId}`;
-const callAll =
-  (...fns: (Function | undefined)[]) =>
-  (...args: any[]) =>
-    fns.forEach((fn) => fn?.(...args));
 const composeClassNames = (classes: Array<string | undefined>) =>
   classes.filter((v) => v).join(" ");
 const omit = (
@@ -560,10 +556,13 @@ export function useValidatedInput<T extends FormValidations>(
       id: getInputId(name, id),
       className: getClasses("input", attrs.className),
       defaultValue: serverFormInfo?.submittedFormData?.lastName,
-      onChange: callAll(onChange, (e: React.ChangeEvent<HTMLInputElement>) => {
-        setDirty(true);
-        setValue(e.target.value);
-      }),
+      onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
+        onChange?.(event);
+        if (!event.defaultPrevented) {
+          setDirty(true);
+          setValue(event.target.value);
+        }
+      },
       ...(showErrors
         ? {
             "aria-invalid": true,
