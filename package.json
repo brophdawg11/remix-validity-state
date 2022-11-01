@@ -10,7 +10,7 @@
     "src/",
     "dist/"
   ],
-  "sideEffects": "false",
+  "sideEffects": false,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/brophdawg11/remix-validity-state.git"
