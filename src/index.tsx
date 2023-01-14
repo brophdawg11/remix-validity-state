@@ -19,7 +19,7 @@ type ValueOf<T> = T[keyof T];
 /**
  * Validation attributes built-in to the browser
  */
-type BuiltInValidationAttrsFunction<T> = (fd: FormData) => T | null | undefined
+type BuiltInValidationAttrsFunction<T> = (fd: FormData) => T | null | undefined;
 interface BuiltInValidationAttrs {
   type?: string | BuiltInValidationAttrsFunction<string>;
   required?: boolean | BuiltInValidationAttrsFunction<boolean>;
@@ -153,6 +153,7 @@ const builtInValidityToAttrMapping: Record<
   patternMismatch: "pattern",
 };
 
+// Mimic browser built-in validations so we can run the on the server
 const builtInValidations: Record<
   KeyOf<BuiltInValidationAttrs>,
   BuiltInValidator
@@ -518,7 +519,6 @@ export function useValidatedInput<T extends FormDefinition>(
   opts: UseValidatedInputOpts<T>
 ) {
   let ctx = useOptionalFormContext<T>();
-  let id = React.useId();
   let name = opts.name;
   let formDefinition = opts.formDefinition || ctx?.formDefinition;
   let forceUpdate = opts.forceUpdate || ctx?.forceUpdate;
@@ -566,6 +566,8 @@ export function useValidatedInput<T extends FormDefinition>(
     }
   }
 
+  // Setup React state
+  let id = React.useId();
   let prevServerFormInfo = React.useRef<ServerFormInfo<T> | undefined>(
     serverFormInfo
   );
@@ -621,6 +623,7 @@ export function useValidatedInput<T extends FormDefinition>(
   let showErrors =
     validity?.valid === false && validationState === "done" && touched;
 
+  // Set InputInfo.touched on `blur` events
   React.useEffect(() => {
     let inputEl = inputRef.current;
     if (!inputEl) {
@@ -631,6 +634,7 @@ export function useValidatedInput<T extends FormDefinition>(
     return () => inputEl?.removeEventListener("blur", handler);
   }, [inputRef]);
 
+  // Set value and InputInfo.dirst on `input` events
   React.useEffect(() => {
     let inputEl = inputRef.current;
     if (!inputEl) {
@@ -644,6 +648,7 @@ export function useValidatedInput<T extends FormDefinition>(
     return () => inputEl?.removeEventListener("input", handler);
   }, [inputRef]);
 
+  // Run validations on input value changes
   React.useEffect(() => {
     async function go() {
       // If we heard back from the server, consider us validated and mark
