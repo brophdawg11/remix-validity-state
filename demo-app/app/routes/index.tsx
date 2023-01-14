@@ -21,6 +21,8 @@ interface FormSchema {
     lastName: InputDefinition;
     emailAddress: InputDefinition;
     hobby: InputDefinition;
+    low: InputDefinition;
+    high: InputDefinition;
   };
   errorMessages: {
     tooShort: ErrorMessage;
@@ -70,15 +72,23 @@ let formDefinition: FormSchema = {
         required: true,
       },
     },
+    low: {
+      validationAttrs: {
+        type: "number",
+        max: (fd) => (fd.get("high") ? Number(fd.get("high")) : undefined),
+      },
+    },
+    high: {
+      validationAttrs: {
+        type: "number",
+        min: (fd) => (fd.get("low") ? Number(fd.get("low")) : undefined),
+      },
+    },
   },
   errorMessages: {
     tooShort: (attrValue, name, value) =>
       `The ${name} field must be at least ${attrValue} characters long, but you have only entered ${value.length} characters`,
   },
-};
-
-type ActionData = {
-  serverFormInfo: ServerFormInfo<typeof formDefinition>;
 };
 
 export const action = async ({ request }: ActionArgs) => {
@@ -220,14 +230,19 @@ export default function Index() {
       <FormContextProvider
         value={{
           formDefinition,
-          // TODO: Can this case go away?  Seems to be coming from the
-          // serialization logic in the useActionData generic
           serverFormInfo: actionData?.serverFormInfo as ServerFormInfo<
             typeof formDefinition
           >,
         }}
       >
-        <Form method="post" autoComplete="off" ref={formRef}>
+        <Form
+          method="post"
+          autoComplete="off"
+          ref={formRef}
+          onChange={(e) => {
+            console.log("form onChange", e);
+          }}
+        >
           <div className="demo-input-container">
             <p className="demo-input-message">
               This first name input has{" "}
@@ -285,6 +300,17 @@ export default function Index() {
               <Field name="hobby" label="Hobby #1" index={0} />
               <Field name="hobby" label="Hobby #2" index={1} />
               <Field name="hobby" label="Hobby #3" index={2} />
+            </div>
+          </div>
+
+          <div className="demo-input-container">
+            <p className="demo-input-message">
+              These low/high inputs use dynamic <code>min</code>/
+              <code>max</code> attributes based on the value of the other input
+            </p>
+            <div className="demo-input">
+              <Field name="low" label="Low" />
+              <Field name="high" label="High" />
             </div>
           </div>
 

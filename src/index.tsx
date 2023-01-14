@@ -13,17 +13,20 @@ type Mutable<T> = {
 // Restrict object keys to strings, and don't permit number/Symbol
 type KeyOf<T> = Extract<keyof T, string>;
 
+// Extract the value type for an object
+type ValueOf<T> = T[keyof T];
+
 /**
  * Validation attributes built-in to the browser
  */
 interface BuiltInValidationAttrs {
-  type?: string;
-  required?: boolean;
-  minLength?: number;
-  maxLength?: number;
-  min?: number;
-  max?: number;
-  pattern?: string;
+  type?: string | ((fd: FormData) => string | null | undefined);
+  required?: boolean | ((fd: FormData) => boolean | null | undefined);
+  minLength?: number | ((fd: FormData) => number | null | undefined);
+  maxLength?: number | ((fd: FormData) => number | null | undefined);
+  min?: number | ((fd: FormData) => number | null | undefined);
+  max?: number | ((fd: FormData) => number | null | undefined);
+  pattern?: string | ((fd: FormData) => string | null | undefined);
 }
 
 type ValidityStateKey = KeyOf<
@@ -191,14 +194,14 @@ const builtInValidations: Record<
   min: {
     domKey: "rangeUnderflow",
     validate: (value, attrValue) =>
-      value.length === 0 || Number(value) < Number(attrValue),
+      value.length === 0 || Number(value) >= Number(attrValue),
     errorMessage: (attrValue) =>
       `Value must be greater than or equal to ${attrValue}`,
   },
   max: {
     domKey: "rangeOverflow",
     validate: (value, attrValue) =>
-      value.length === 0 || Number(value) > Number(attrValue),
+      value.length === 0 || Number(value) <= Number(attrValue),
     errorMessage: (attrValue) =>
       `Value must be less than or equal to ${attrValue}`,
   },
@@ -279,18 +282,36 @@ function getBaseValidityState(): ExtendedValidityState {
 }
 
 // Perform all specified html validations for a single input
+// Called in a useEffect client side and from validateServerFormIno server-side
 async function validateInput(
-  inputEl: HTMLInputElement | null,
-  value: string,
+  inputName: string,
   inputDef: InputDefinition,
-  formData?: FormData
+  value: string,
+  inputEl?: HTMLInputElement, // CSR
+  formData?: FormData // SSR
 ): Promise<ExtendedValidityState> {
   let validity = getBaseValidityState();
+
+  if (!formData) {
+    invariant(
+      inputEl?.form,
+      `validateInput expected an inputEl.form to be available for input "${inputName}"`
+    );
+    formData = new FormData(inputEl.form);
+  }
 
   if (inputDef.validationAttrs) {
     for (let _attr of Object.keys(inputDef.validationAttrs)) {
       let attr = _attr as KeyOf<BuiltInValidationAttrs>;
-      let attrValue = inputDef.validationAttrs[attr];
+      let attrValue = calculateValidationAttr(
+        inputDef.validationAttrs[attr],
+        formData
+      );
+      // Undefined attr values means the attribute doesn't exist and there's
+      // nothing to validate
+      if (attrValue == null) {
+        continue;
+      }
       let builtInValidation = builtInValidations[attr];
       let isInvalid = inputEl?.validity
         ? inputEl?.validity[builtInValidation.domKey]
@@ -341,8 +362,16 @@ export async function validateServerFormData<T extends FormDefinition>(
             touched: true,
             dirty: true,
             state: "done",
-            validity: await validateInput(null, value, inputDef, formData),
+            validity: await validateInput(
+              inputName,
+              inputDef,
+              value,
+              undefined,
+              formData
+            ),
           };
+          // Add the values to inputs/submittedValues properly depending on if
+          // we've encountered multiple values for this input name or not
           addValueFromSingleOrMultipleInput(inputName, inputInfo, inputs);
           addValueFromSingleOrMultipleInput(inputName, value, submittedValues);
           valid = valid && inputInfo.validity.valid;
@@ -358,7 +387,6 @@ export async function validateServerFormData<T extends FormDefinition>(
 }
 
 function getInputDefaultValue<T extends FormDefinition>(
-  formDefinitions: T,
   name: string,
   serverFormInfo?: ServerFormInfo<T>,
   index?: number
@@ -390,6 +418,53 @@ function addValueFromSingleOrMultipleInput<T>(
   } else {
     values[name] = value;
   }
+}
+
+// Generate a FormData object from our submittedValues structure.  This is
+// needed for the _initial_ render after a document POST submission where we
+// don't yet have an input ref to access the <form>, but we need a FormData
+// instance to determine the initial validation attribute values (in case any
+// are dynamic).  So we can re-construct from what we just submitted.
+// Subsequent renders then use ne wFormData(inputRef.current.form)
+function generateFormDataFromServerFormInfo<T extends FormDefinition>(
+  submittedValues: ServerFormInfo<T>["submittedValues"]
+) {
+  let formData = new FormData();
+  Object.keys(submittedValues).forEach((k) => {
+    let v = submittedValues[k];
+    if (Array.isArray(v)) {
+      v.forEach((v2) => formData.append(k, v2));
+    } else if (typeof v === "string") {
+      formData.set(k, v);
+    }
+  });
+  return formData;
+}
+
+// Calculate a single validation attribute value to render onto an individual input
+function calculateValidationAttr(
+  attrValue: ValueOf<BuiltInValidationAttrs>,
+  formData: FormData
+) {
+  return typeof attrValue === "function" ? attrValue(formData) : attrValue;
+}
+
+// Calculate the validation attribute values to render onto an individual input
+function calculateValidationAttrs<T extends FormDefinition>(
+  validationAttrs: InputDefinition["validationAttrs"],
+  formData: FormData
+) {
+  let entries = Object.entries(validationAttrs || {}) as [
+    KeyOf<BuiltInValidationAttrs>,
+    ValueOf<BuiltInValidationAttrs>
+  ][];
+  return entries.reduce((acc, [attrName, attrValue]) => {
+    let value = calculateValidationAttr(attrValue, formData);
+    if (value != null) {
+      acc[attrName] = value;
+    }
+    return acc;
+  }, {} as Record<string, string | number | boolean>);
 }
 
 //#endregion
@@ -446,6 +521,13 @@ export function useValidatedInput<T extends FormDefinition>(
       "or be passed a `formDefinition` object"
   );
 
+  let inputDef = formDefinition.inputs[name];
+
+  invariant(
+    inputDef,
+    `useValidatedInput() could not find a corresponding definition for the "${name}" input`
+  );
+
   let errorMessages = (key: ValidityStateKey, inputName: KeyOf<T["inputs"]>) =>
     formDefinition?.inputs?.[inputName]?.errorMessages?.[key] ||
     formDefinition?.errorMessages?.[key];
@@ -491,8 +573,19 @@ export function useValidatedInput<T extends FormDefinition>(
     InputInfo["validity"] | undefined
   >(serverValidity);
   let controller = React.useRef<AbortController | null>(null);
-  let currentErrorMessages: Record<string, string> | undefined;
 
+  let formData = inputRef.current?.form
+    ? new FormData(inputRef.current.form)
+    : serverFormInfo
+    ? generateFormDataFromServerFormInfo(serverFormInfo.submittedValues)
+    : new FormData();
+
+  let validationAttrs = calculateValidationAttrs(
+    inputDef.validationAttrs,
+    formData
+  );
+
+  let currentErrorMessages: Record<string, string> | undefined;
   if (validity?.valid === false) {
     currentErrorMessages = Object.entries(validity)
       .filter((e) => e[0] !== "valid" && e[1])
@@ -504,8 +597,7 @@ export function useValidatedInput<T extends FormDefinition>(
           errorMessages(validation as ValidityStateKey, name) ||
           builtInValidations[attr]?.errorMessage;
         if (typeof message === "function") {
-          let attrValue =
-            formDefinition?.inputs?.[name]?.validationAttrs?.[attr];
+          let attrValue = validationAttrs[attr];
           message = message(
             attrValue ? String(attrValue) : undefined,
             name,
@@ -544,6 +636,13 @@ export function useValidatedInput<T extends FormDefinition>(
     return () => inputEl?.removeEventListener("input", handler);
   }, [inputRef]);
 
+  // TODO: Need to trigger this on dependent form field changes.  So if the
+  // value of `end` is generated dynamically based on the value of
+  // `formData.get('start')` - this will only currently re-run if our input
+  // value changes.  But we need it to re-run if _any_ value changes.  Right
+  // now I'm thinking just a useState({}) and if we detect any dynamic attribute
+  // values we attach a listener to the form onChange and trigger a re-render
+  // that way :/
   React.useEffect(() => {
     async function go() {
       // If we heard back from the server, consider us validated and mark
@@ -570,8 +669,7 @@ export function useValidatedInput<T extends FormDefinition>(
       }
 
       // Validate the input
-      let inputValidations = formDefinition?.inputs[name];
-      if (!inputValidations) {
+      if (!inputDef) {
         console.warn(`No validations found for the "${name}" input`);
         setValidationState("done");
         return;
@@ -580,9 +678,10 @@ export function useValidatedInput<T extends FormDefinition>(
       controller.current = localController;
       setValidationState("validating");
       const validity = await validateInput(
-        inputRef.current,
+        name,
+        inputDef,
         value,
-        inputValidations
+        inputRef.current || undefined
       );
       if (localController.signal.aborted) {
         return;
@@ -594,15 +693,7 @@ export function useValidatedInput<T extends FormDefinition>(
     go().catch((e) => console.error("Error in validateInput useEffect", e));
 
     return () => controller.current?.abort();
-  }, [
-    dirty,
-    touched,
-    value,
-    formDefinition,
-    name,
-    serverFormInfo,
-    serverValidity,
-  ]);
+  }, [name, inputDef, value, serverFormInfo, serverValidity]);
 
   function getClasses(type: "label" | "input", className?: string) {
     return composeClassNames([
@@ -619,20 +710,12 @@ export function useValidatedInput<T extends FormDefinition>(
   function getInputAttrs({
     ...attrs
   }: React.ComponentPropsWithoutRef<"input"> = {}): React.ComponentPropsWithoutRef<"input"> {
-    let validationAttrs = Object.entries(
-      formDefinition?.inputs[name]?.validationAttrs || {}
-    ).reduce((acc, [attr, value]) => Object.assign(acc, { [attr]: value }), {});
     let inputAttrs = {
       ref: composedRef,
       name,
       id: getInputId(name, id),
       className: getClasses("input", attrs.className),
-      defaultValue: getInputDefaultValue(
-        formDefinition!,
-        name,
-        serverFormInfo,
-        opts.index
-      ),
+      defaultValue: getInputDefaultValue(name, serverFormInfo, opts.index),
       ...(showErrors
         ? {
             "aria-invalid": true,
@@ -722,12 +805,7 @@ export function Field<T extends FormDefinition>({
       </label>
       <input
         {...getInputAttrs({
-          defaultValue: getInputDefaultValue(
-            formDefinition,
-            name,
-            serverFormInfo,
-            index
-          ),
+          defaultValue: getInputDefaultValue(name, serverFormInfo, index),
           ...inputAttrs,
         })}
       />
