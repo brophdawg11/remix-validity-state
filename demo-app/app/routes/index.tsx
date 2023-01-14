@@ -1,6 +1,6 @@
 import { Form, useActionData } from "@remix-run/react";
-import type { ActionFunction } from "@remix-run/server-runtime";
-import { json, redirect } from "@remix-run/server-runtime";
+import type { ActionArgs } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
 import * as React from "react";
 import type {
   ErrorMessages,
@@ -19,10 +19,6 @@ type MyFormValidations = {
   middleInitial: Validations;
   lastName: Validations;
   emailAddress: Validations;
-};
-
-type ActionData = {
-  serverFormInfo: ServerFormInfo<MyFormValidations>;
 };
 
 // Validations for our entire form, composed of raw HTML validation attributes
@@ -61,7 +57,7 @@ const customErrorMessages: ErrorMessages = {
     `The email address "${value}" is already in use!`,
 };
 
-export const action: ActionFunction = async ({ request }) => {
+export const action = async ({ request }: ActionArgs) => {
   const formData = await request.formData();
 
   // Validate server-side using the same validations specified in the <input>
@@ -74,7 +70,7 @@ export const action: ActionFunction = async ({ request }) => {
     formValidations
   );
   if (!serverFormInfo.valid) {
-    return json<ActionData>({ serverFormInfo });
+    return json({ serverFormInfo });
   }
   return redirect("/");
 };
@@ -101,7 +97,7 @@ function EmailAddress() {
 }
 
 export default function Index() {
-  let actionData = useActionData<ActionData>();
+  let actionData = useActionData<typeof action>();
   let formRef = React.useRef<HTMLFormElement>(null);
 
   // Use built-in browser validation prior to JS loading, then switch
