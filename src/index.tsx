@@ -19,14 +19,15 @@ type ValueOf<T> = T[keyof T];
 /**
  * Validation attributes built-in to the browser
  */
+type BuiltInValidationAttrsFunction<T> = (fd: FormData) => T | null | undefined
 interface BuiltInValidationAttrs {
-  type?: string | ((fd: FormData) => string | null | undefined);
-  required?: boolean | ((fd: FormData) => boolean | null | undefined);
-  minLength?: number | ((fd: FormData) => number | null | undefined);
-  maxLength?: number | ((fd: FormData) => number | null | undefined);
-  min?: number | ((fd: FormData) => number | null | undefined);
-  max?: number | ((fd: FormData) => number | null | undefined);
-  pattern?: string | ((fd: FormData) => string | null | undefined);
+  type?: string | BuiltInValidationAttrsFunction<string>;
+  required?: boolean | BuiltInValidationAttrsFunction<boolean>;
+  minLength?: number | BuiltInValidationAttrsFunction<number>;
+  maxLength?: number | BuiltInValidationAttrsFunction<number>;
+  min?: number | BuiltInValidationAttrsFunction<number>;
+  max?: number | BuiltInValidationAttrsFunction<number>;
+  pattern?: string | BuiltInValidationAttrsFunction<string>;
 }
 
 type ValidityStateKey = KeyOf<
