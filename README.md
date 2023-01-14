@@ -140,7 +140,7 @@ In Remix, your submit your forms to an `action` which receives the `FormData`. I
 ```js
 import { validateServerFormData } from "remix-validity-state";
 
-export async function action({ request }) {
+export async function action({ request }: ActionArgs) {
   const formData = await request.formData();
   const serverFormInfo = await validateServerFormData(
     formData,
@@ -162,7 +162,7 @@ When we validate on the server, we may get errors back that we didn't catch duri
 import { Field, FormContextProvider } from "remix-validity-state";
 
 export default function MyRemixRouteComponent() {
-  let actionData = useActionData();
+  let actionData = useActionData<typeof action>();
   return (
     <FormContextProvider
       value={{

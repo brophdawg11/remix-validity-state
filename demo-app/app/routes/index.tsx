@@ -1,6 +1,6 @@
 import { Form, useActionData } from "@remix-run/react";
-import type { ActionFunction } from "@remix-run/server-runtime";
-import { json, redirect } from "@remix-run/server-runtime";
+import type { ActionArgs } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
 import * as React from "react";
 import type {
   ErrorMessage,
@@ -81,7 +81,7 @@ type ActionData = {
   serverFormInfo: ServerFormInfo<typeof formDefinition>;
 };
 
-export const action: ActionFunction = async ({ request }) => {
+export const action = async ({ request }: ActionArgs) => {
   const formData = await request.formData();
 
   // Validate server-side using the same validations specified in the <input>
@@ -92,7 +92,7 @@ export const action: ActionFunction = async ({ request }) => {
   const serverFormInfo = await validateServerFormData(formData, formDefinition);
 
   if (!serverFormInfo.valid) {
-    return json<ActionData>({ serverFormInfo });
+    return json({ serverFormInfo });
   }
   return redirect("/");
 };
@@ -119,7 +119,7 @@ function EmailAddress() {
 }
 
 export default function Index() {
-  let actionData = useActionData() as ActionData;
+  let actionData = useActionData<typeof action>();
 
   let formRef = React.useRef<HTMLFormElement>(null);
 
