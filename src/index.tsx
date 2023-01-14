@@ -13,9 +13,6 @@ type Mutable<T> = {
 // Restrict object keys to strings, and don't permit number/Symbol
 type KeyOf<T> = Extract<keyof T, string>;
 
-// Extract the value type for an object
-type ValueOf<T> = T[keyof T];
-
 /**
  * Validation attributes built-in to the browser
  */
@@ -106,8 +103,8 @@ export interface InputInfo {
 
 // Server-side only (currently) - validate all specified inputs in the formData
 export type ServerFormInfo<T extends FormDefinition> = {
-  submittedFormData: Record<string, string>;
-  inputs: Record<KeyOf<T["inputs"]>, InputInfo>;
+  submittedValues: Record<KeyOf<T["inputs"]>, string | string[]>;
+  inputs: Record<KeyOf<T["inputs"]>, InputInfo | InputInfo[]>;
   valid: boolean;
 };
 
@@ -157,24 +154,19 @@ const builtInValidations: Record<
 > = {
   type: {
     domKey: "typeMismatch",
-    validate: (value: string, attrValue: string): boolean => {
-      // FIXME: How much do we want to do here?
+    validate: (): boolean => {
+      // Not re-implementing the built-in browser type validations :)
       return true;
     },
     errorMessage: (attrValue) => {
-      let messages = {
+      let messages: Record<string, string> = {
         date: "Invalid date",
         email: "Invalid email",
         number: "Invalid number",
         tel: "Invalid phone number",
         url: "Invalid URL",
       };
-      if (typeof attrValue === "string" && attrValue in messages) {
-        // TODO: ???
-        //@ts-ignore
-        return messages[attrValue];
-      }
-      return "Invalid value";
+      return (attrValue ? messages[attrValue] : null) || "Invalid value";
     },
   },
   required: {
@@ -259,10 +251,6 @@ function useComposedRefs<RefValueType = unknown>(
 const getInputId = (name: string, reactId: string) => `${name}--${reactId}`;
 const getErrorsId = (name: string, reactId: string) =>
   `${name}-errors--${reactId}`;
-const callAll =
-  (...fns: (Function | undefined)[]) =>
-  (...args: any[]) =>
-    fns.forEach((fn) => fn?.(...args));
 const composeClassNames = (classes: Array<string | undefined>) =>
   classes.filter((v) => v).join(" ");
 const omit = (
@@ -312,7 +300,6 @@ async function validateInput(
     }
   }
 
-  // TODO: Should we skip running these if we already know it's invalid?
   if (inputDef.customValidations) {
     let currentFormData =
       formData || (inputEl?.form ? new FormData(inputEl.form) : undefined);
@@ -332,16 +319,13 @@ export async function validateServerFormData<T extends FormDefinition>(
   formData: FormData,
   formDefinition: T
 ): Promise<ServerFormInfo<T>> {
-  // Echo back submitted form data for input pre-population
-  const submittedFormData = Array.from(formData.entries()).reduce(
-    (acc, e) => Object.assign(acc, { [e[0]]: e[1] }),
-    {}
-  );
-
-  // Unsure if there's a better way to do this - but this complains since we
-  // haven't filled in the keys yet
+  // Unsure if there's a better way to do this type of object mapping while
+  // keeping the keys strongly typed - but this currently complains since we
+  // haven't filled in the required keys yet
   // @ts-expect-error
-  const inputs: Record<KeyOf<T["inputs"]>, InputInfo> = {};
+  const inputs: ServerFormInfo["inputs"] = {};
+  // @ts-expect-error
+  const submittedValues: ServerFormInfo["submittedValues"] = {};
 
   let valid = true;
   let entries = Object.entries(formDefinition.inputs) as Array<
@@ -349,22 +333,65 @@ export async function validateServerFormData<T extends FormDefinition>(
   >;
   await Promise.all(
     entries.map(async ([inputName, inputDef]) => {
-      const value = formData.get(inputName);
-      if (typeof value === "string") {
-        let validity = await validateInput(null, value, inputDef, formData);
-        // Always assume inputs have been modified during SSR validation
-        inputs[inputName] = {
-          touched: true,
-          dirty: true,
-          state: "done",
-          validity,
-        };
-        valid = valid && validity.valid;
+      let values = formData.getAll(inputName);
+      for (let value of values) {
+        if (typeof value === "string") {
+          // Always assume inputs have been modified during SSR validation
+          let inputInfo = {
+            touched: true,
+            dirty: true,
+            state: "done",
+            validity: await validateInput(null, value, inputDef, formData),
+          };
+          addValueFromSingleOrMultipleInput(inputName, inputInfo, inputs);
+          addValueFromSingleOrMultipleInput(inputName, value, submittedValues);
+          valid = valid && inputInfo.validity.valid;
+        } else {
+          console.warn(
+            `Skipping non-string value in FormData for field [${inputName}]`
+          );
+        }
       }
     })
   );
-  return { submittedFormData, inputs, valid };
+  return { submittedValues, inputs, valid };
 }
+
+function getInputDefaultValue<T extends FormDefinition>(
+  formDefinitions: T,
+  name: string,
+  serverFormInfo?: ServerFormInfo<T>,
+  index?: number
+) {
+  let submittedValue = serverFormInfo?.submittedValues?.[name];
+  if (Array.isArray(submittedValue)) {
+    invariant(
+      index != null && index >= 0,
+      `Expected an "index" value for multiple-submission field "${name}"`
+    );
+    return submittedValue[index];
+  } else if (typeof submittedValue === "string") {
+    return submittedValue;
+  }
+}
+
+function addValueFromSingleOrMultipleInput<T>(
+  name: string,
+  value: T,
+  values: Record<string, T | T[]>
+) {
+  if (name in values) {
+    let existingValue = values[name];
+    if (Array.isArray(existingValue)) {
+      existingValue.push(value);
+    } else {
+      values[name] = [existingValue, value];
+    }
+  } else {
+    values[name] = value;
+  }
+}
+
 //#endregion
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -401,6 +428,7 @@ interface UseValidatedInputOpts<T extends FormDefinition> {
   ref?:
     | React.ForwardedRef<HTMLInputElement | null | undefined>
     | React.Ref<HTMLInputElement | null | undefined>;
+  index?: number;
 }
 
 // Handle validations for a single input
@@ -422,17 +450,38 @@ export function useValidatedInput<T extends FormDefinition>(
     formDefinition?.inputs?.[inputName]?.errorMessages?.[key] ||
     formDefinition?.errorMessages?.[key];
 
-  // TODO: Can this cast from context be avoided?
-  let serverFormInfo =
-    opts.serverFormInfo || (ctx?.serverFormInfo as ServerFormInfo<T>);
+  let serverFormInfo = opts.serverFormInfo || ctx?.serverFormInfo;
+  let wasSubmitted = false;
+  let serverValue: string | undefined = undefined;
+  let serverValidity: InputInfo["validity"] = undefined;
 
-  let wasSubmitted = serverFormInfo != null;
+  if (serverFormInfo != null) {
+    wasSubmitted = true;
+    let submittedValue = serverFormInfo.submittedValues[name];
+    let inputInfo = serverFormInfo.inputs[name];
+    if (Array.isArray(inputInfo) || Array.isArray(submittedValue)) {
+      invariant(
+        Array.isArray(inputInfo) && Array.isArray(submittedValue),
+        `Incompatible serverFormInfo structure for field "${name}"`
+      );
+      invariant(
+        opts.index != null && opts.index >= 0,
+        `Expected an "index" value for multiple-submission field "${name}"`
+      );
+      serverValue = submittedValue[opts.index];
+      serverValidity = inputInfo[opts.index].validity;
+    } else {
+      serverValue = submittedValue;
+      serverValidity = inputInfo.validity;
+    }
+  }
+
   let prevServerFormInfo = React.useRef<ServerFormInfo<T> | undefined>(
     serverFormInfo
   );
   let inputRef = React.useRef<HTMLInputElement>(null);
   let composedRef = useComposedRefs(inputRef, opts.ref);
-  let [value, setValue] = React.useState("");
+  let [value, setValue] = React.useState(serverValue || "");
   let [dirty, setDirty] = React.useState<boolean>(wasSubmitted);
   let [touched, setTouched] = React.useState<boolean>(wasSubmitted);
   let [validationState, setValidationState] = React.useState<
@@ -440,7 +489,7 @@ export function useValidatedInput<T extends FormDefinition>(
   >(wasSubmitted ? "done" : "idle");
   let [validity, setValidity] = React.useState<
     InputInfo["validity"] | undefined
-  >(serverFormInfo?.inputs?.[name]?.validity);
+  >(serverValidity);
   let controller = React.useRef<AbortController | null>(null);
   let currentErrorMessages: Record<string, string> | undefined;
 
@@ -503,8 +552,8 @@ export function useValidatedInput<T extends FormDefinition>(
         setDirty(true);
         setTouched(true);
         setValidationState("done");
-        if (serverFormInfo.inputs[name]) {
-          setValidity(serverFormInfo.inputs[name].validity);
+        if (serverValidity) {
+          setValidity(serverValidity);
         }
       }
 
@@ -545,7 +594,15 @@ export function useValidatedInput<T extends FormDefinition>(
     go().catch((e) => console.error("Error in validateInput useEffect", e));
 
     return () => controller.current?.abort();
-  }, [dirty, touched, value, formDefinition, name, serverFormInfo]);
+  }, [
+    dirty,
+    touched,
+    value,
+    formDefinition,
+    name,
+    serverFormInfo,
+    serverValidity,
+  ]);
 
   function getClasses(type: "label" | "input", className?: string) {
     return composeClassNames([
@@ -570,7 +627,12 @@ export function useValidatedInput<T extends FormDefinition>(
       name,
       id: getInputId(name, id),
       className: getClasses("input", attrs.className),
-      defaultValue: serverFormInfo?.submittedFormData?.lastName,
+      defaultValue: getInputDefaultValue(
+        formDefinition!,
+        name,
+        serverFormInfo,
+        opts.index
+      ),
       ...(showErrors
         ? {
             "aria-invalid": true,
@@ -591,7 +653,6 @@ export function useValidatedInput<T extends FormDefinition>(
     return {
       className: getClasses("label", attrs.className),
       htmlFor: getInputId(name, id),
-      defaultValue: serverFormInfo?.submittedFormData?.radioThing,
       ...omit(attrs, "className"),
     };
   }
@@ -628,6 +689,7 @@ export interface FieldProps<T extends FormDefinition>
   extends UseValidatedInputOpts<T>,
     Omit<React.ComponentPropsWithoutRef<"input">, "name"> {
   label: string;
+  index?: number;
 }
 
 // Syntactic sugar component to handle <label>/<input> and error displays
@@ -636,32 +698,21 @@ export function Field<T extends FormDefinition>({
   formDefinition: formDefinitionProp,
   serverFormInfo: serverFormInfoProp,
   label,
+  index,
   ...inputAttrs
 }: FieldProps<T>) {
   let ctx = useOptionalFormContext<T>();
   let formDefinition = formDefinitionProp || ctx?.formDefinition;
   let serverFormInfo = serverFormInfoProp || ctx?.serverFormInfo;
   let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } =
-    useValidatedInput({ name, formDefinition, serverFormInfo });
+    useValidatedInput({ name, formDefinition, serverFormInfo, index });
 
   invariant(
     formDefinition,
     `No form definition found for <Field name="${name}">`
   );
 
-  function ValidationDisplay() {
-    let showErrors = serverFormInfo != null || info.touched;
-    if (!showErrors || info.state === "idle") {
-      return null;
-    }
-    if (info.state === "validating") {
-      return <p className="rvs-validating">Validating...</p>;
-    }
-    if (info.validity?.valid) {
-      return null;
-    }
-    return <Errors {...getErrorsAttrs()} messages={info.errorMessages} />;
-  }
+  let showErrors = serverFormInfo != null || info.touched;
 
   return (
     <>
@@ -671,15 +722,37 @@ export function Field<T extends FormDefinition>({
       </label>
       <input
         {...getInputAttrs({
-          defaultValue: serverFormInfo?.submittedFormData?.[name],
+          defaultValue: getInputDefaultValue(
+            formDefinition,
+            name,
+            serverFormInfo,
+            index
+          ),
           ...inputAttrs,
         })}
       />
 
       {/* Display validation state */}
-      <ValidationDisplay />
+      {showErrors ? <FieldErrors info={info} {...getErrorsAttrs()} /> : null}
     </>
   );
+}
+
+interface FieldErrorsProps extends React.ComponentPropsWithoutRef<"ul"> {
+  info: InputInfo;
+}
+
+function FieldErrors({ info, ...attrs }: FieldErrorsProps) {
+  if (info.state === "idle") {
+    return null;
+  }
+  if (info.state === "validating") {
+    return <p className="rvs-validating">Validating...</p>;
+  }
+  if (info.validity?.valid) {
+    return null;
+  }
+  return <Errors {...attrs} messages={info.errorMessages} />;
 }
 
 export interface ErrorProps {
