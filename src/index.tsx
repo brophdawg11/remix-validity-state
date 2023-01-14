@@ -124,6 +124,7 @@ interface BuiltInValidator {
 interface FormContextObject<T extends FormDefinition> {
   formDefinition: T;
   serverFormInfo?: ServerFormInfo<T>;
+  forceUpdate: any;
 }
 
 /**
@@ -386,6 +387,8 @@ export async function validateServerFormData<T extends FormDefinition>(
   return { submittedValues, inputs, valid };
 }
 
+// Determine the defaultValue for a rendered input, properly handling inputs
+// with multiple values
 function getInputDefaultValue<T extends FormDefinition>(
   name: string,
   serverFormInfo?: ServerFormInfo<T>,
@@ -403,6 +406,8 @@ function getInputDefaultValue<T extends FormDefinition>(
   }
 }
 
+// Mutate `value` properly depending on whether or not we have multiple values
+// for a given input name
 function addValueFromSingleOrMultipleInput<T>(
   name: string,
   value: T,
@@ -467,6 +472,15 @@ function calculateValidationAttrs<T extends FormDefinition>(
   }, {} as Record<string, string | number | boolean>);
 }
 
+// Does our form have any dynamic attribute values that require re-evaluation
+// on all form changes?
+function hasDynamicAttributes(formDefinition: FormDefinition) {
+  return Object.values(formDefinition.inputs).some((inputDef) =>
+    Object.values(inputDef.validationAttrs || {}).some(
+      (attr) => typeof attr === "function"
+    )
+  );
+}
 //#endregion
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -504,6 +518,7 @@ interface UseValidatedInputOpts<T extends FormDefinition> {
     | React.ForwardedRef<HTMLInputElement | null | undefined>
     | React.Ref<HTMLInputElement | null | undefined>;
   index?: number;
+  forceUpdate?: any;
 }
 
 // Handle validations for a single input
@@ -514,6 +529,7 @@ export function useValidatedInput<T extends FormDefinition>(
   let id = React.useId();
   let name = opts.name;
   let formDefinition = opts.formDefinition || ctx?.formDefinition;
+  let forceUpdate = opts.forceUpdate || ctx?.forceUpdate;
 
   invariant(
     formDefinition,
@@ -636,13 +652,6 @@ export function useValidatedInput<T extends FormDefinition>(
     return () => inputEl?.removeEventListener("input", handler);
   }, [inputRef]);
 
-  // TODO: Need to trigger this on dependent form field changes.  So if the
-  // value of `end` is generated dynamically based on the value of
-  // `formData.get('start')` - this will only currently re-run if our input
-  // value changes.  But we need it to re-run if _any_ value changes.  Right
-  // now I'm thinking just a useState({}) and if we detect any dynamic attribute
-  // values we attach a listener to the form onChange and trigger a re-render
-  // that way :/
   React.useEffect(() => {
     async function go() {
       // If we heard back from the server, consider us validated and mark
@@ -693,7 +702,10 @@ export function useValidatedInput<T extends FormDefinition>(
     go().catch((e) => console.error("Error in validateInput useEffect", e));
 
     return () => controller.current?.abort();
-  }, [name, inputDef, value, serverFormInfo, serverValidity]);
+
+    // Important: forceUpdate must remain included in the deps array for
+    // auto-revalidation on dynamic attribute value changes
+  }, [forceUpdate, name, inputDef, value, serverFormInfo, serverValidity]);
 
   function getClasses(type: "label" | "input", className?: string) {
     return composeClassNames([
@@ -766,6 +778,45 @@ export function useValidatedInput<T extends FormDefinition>(
     getLabelAttrs,
     getErrorsAttrs,
   };
+}
+
+export interface FormProviderProps<
+  T extends FormDefinition
+> extends React.PropsWithChildren<{
+    formDefinition: T;
+    serverFormInfo: ServerFormInfo<T>;
+    formRef?: React.RefObject<HTMLFormElement>;
+  }> {}
+
+export function FormProvider<T extends FormDefinition>(
+  props: FormProviderProps<T>
+) {
+  // If we have inputs using dynamic attributes, then we need to be able to
+  // trigger re-renders o those inputs at a higher level an time the formData
+  // changes, in case the dynamic attributes values need to be updated.
+  let [forcedUpdate, forceUpdate] = React.useState({});
+  React.useEffect(() => {
+    let formEl = props.formRef?.current;
+    if (!formEl || !hasDynamicAttributes(props.formDefinition)) {
+      return;
+    }
+    let handler = () => forceUpdate({});
+    formEl.addEventListener("change", handler, { capture: true });
+    return () =>
+      formEl?.removeEventListener("change", handler, { capture: true });
+  }, [props.formDefinition, props.formRef]);
+
+  return (
+    <FormContext.Provider
+      value={{
+        formDefinition: props.formDefinition,
+        serverFormInfo: props.serverFormInfo,
+        forceUpdate: forcedUpdate,
+      }}
+    >
+      {props.children}
+    </FormContext.Provider>
+  );
 }
 
 export interface FieldProps<T extends FormDefinition>

@@ -9,7 +9,7 @@ import type {
 } from "remix-validity-state";
 import {
   Field,
-  FormContextProvider,
+  FormProvider,
   useValidatedInput,
   validateServerFormData,
 } from "remix-validity-state";
@@ -227,22 +227,14 @@ export default function Index() {
         .
       </p>
       <hr />
-      <FormContextProvider
-        value={{
-          formDefinition,
-          serverFormInfo: actionData?.serverFormInfo as ServerFormInfo<
-            typeof formDefinition
-          >,
-        }}
+      <FormProvider
+        formDefinition={formDefinition}
+        serverFormInfo={
+          actionData?.serverFormInfo as ServerFormInfo<typeof formDefinition>
+        }
+        formRef={formRef}
       >
-        <Form
-          method="post"
-          autoComplete="off"
-          ref={formRef}
-          onChange={(e) => {
-            console.log("form onChange", e);
-          }}
-        >
+        <Form method="post" autoComplete="off" ref={formRef}>
           <div className="demo-input-container">
             <p className="demo-input-message">
               This first name input has{" "}
@@ -316,7 +308,7 @@ export default function Index() {
 
           <button type="submit">Submit</button>
         </Form>
-      </FormContextProvider>
+      </FormProvider>
     </div>
   );
 }
