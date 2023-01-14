@@ -489,15 +489,6 @@ function hasDynamicAttributes(formDefinition: FormDefinition) {
 export const FormContext =
   React.createContext<FormContextObject<FormDefinition> | null>(null);
 
-// Shout out for this nifty little approach!
-// https://www.hipsterbrown.com/musings/musing/react-context-with-generics/
-export function FormContextProvider<T extends FormDefinition>({
-  children,
-  value,
-}: React.PropsWithChildren<{ value: FormContextObject<T> }>) {
-  return <FormContext.Provider value={value}>{children}</FormContext.Provider>;
-}
-
 export function useOptionalFormContext<
   T extends FormDefinition
 >(): FormContextObject<T> | null {
@@ -533,7 +524,7 @@ export function useValidatedInput<T extends FormDefinition>(
 
   invariant(
     formDefinition,
-    "useValidatedInput() must either be used inside a <FormContext.Provider> " +
+    "useValidatedInput() must either be used inside a <FormProvider> " +
       "or be passed a `formDefinition` object"
   );
 

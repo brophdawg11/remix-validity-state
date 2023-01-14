@@ -1,10 +1,10 @@
 # Remix Validity State
 
-`remix-validity-state` is a small [React](https://reactjs.org/) form validation library that aims to embrace HTML input validation and play nicely with [Remix](https://remix.run) primitives.
+`remix-validity-state` is a small [React](https://reactjs.org/) form validation library that aims to embrace HTML input validation and play nicely with [Remix](https://remix.run) and [React Router](https://reactrouter.com/en/main) primitives (specifically submitting forms to `action` handlers). However, it's worth noting that this library doesn't use anything specific from Remix or React Router and could be leveraged in any React application.
 
 > **Warning**
 >
-> This library is in very much in an alpha stage. Feedback is welcome, however production usage is strongly discouraged.
+> This library is still in a beta stage. It's feeling more stable these days but I can't guarantee there won't be breaking changes ahead 😀.
 
 - [Remix Validity State](#remix-validity-state)
   - [Design Goals](#design-goals)
@@ -13,19 +13,20 @@
     - [Demo App](#demo-app)
     - [Getting Started](#getting-started)
       - [Define your form validations](#define-your-form-validations)
-      - [Provide your validations via `FormContextProvider`](#provide-your-validations-via-formcontextprovider)
-      - [Render `<Field>` Components inside your `FormContextProvider`](#render-field-components-inside-your-formcontextprovider)
+      - [Provide your validations via `FormProvider`](#provide-your-validations-via-formprovider)
+      - [Render `<Field>` Components inside your `FormProvider`](#render-field-components-inside-your-formprovider)
       - [Wire up server-side validations](#wire-up-server-side-validations)
-      - [Add your server action response to the `FormContext`](#add-your-server-action-response-to-the-formcontext)
+      - [Add your server action response to the `FormProvider`](#add-your-server-action-response-to-the-formprovider)
       - [That's it!](#thats-it)
     - [Advanced Usages and Concepts](#advanced-usages-and-concepts)
       - [`EnhancedValidityState`](#enhancedvaliditystate)
+      - [Multiple Inputs with the Same Name](#multiple-inputs-with-the-same-name)
+      - [Dynamic (Form-Dependent) Validation Attributes](#dynamic-form-dependent-validation-attributes)
       - [Custom Validations](#custom-validations)
       - [Error Messages](#error-messages)
       - [useValidatedInput()](#usevalidatedinput)
       - [Styling](#styling)
       - [Typescript](#typescript)
-  - [Not Yet Implemented](#not-yet-implemented)
   - [Feedback + Contributing](#feedback--contributing)
 
 ## Design Goals
@@ -85,57 +86,88 @@ npm run dev
 
 In order to share validations between server and client, we define a single object containing all of our form field validations, keyed by the input names. Validations are specified using the built-in HTML validation attributes, exactly as you'd render them onto a JSX `<input>`.
 
-```js
-const formValidations = {
-  firstName: {
-    required: true,
-    maxLength: 50,
-  },
-  middleInitial: {
-    pattern: "^[a-zA-Z]{1}$",
-  },
-  lastName: {
-    required: true,
-    maxLength: 50,
-  },
-  emailAddress: {
-    type: "email",
-    required: true,
-    maxLength: 50,
+If you're using TypeScript (and you should!) you should define a schema that corresponds to the `FormDefinition` interface so you can benefit from proper type inference on library APIs.
+
+```ts
+interface FormSchema {
+  inputs: {
+    firstName: InputDefinition;
+    middleInitial: InputDefinition;
+    lastName: InputDefinition;
+    emailAddress: InputDefinition;
+  };
+}
+
+let formDefinition: FormSchema = {
+  inputs: {
+    firstName: {
+      validationAttrs: {
+        required: true,
+        maxLength: 50,
+      },
+    },
+    middleInitial: {
+      validationAttrs: {
+        pattern: "^[a-zA-Z]{1}$",
+      },
+    },
+    lastName: {
+      validationAttrs: {
+        required: true,
+        maxLength: 50,
+      },
+    },
+    emailAddress: {
+      validationAttrs: {
+        type: "email",
+        required: true,
+        maxLength: 50,
+      },
+    },
   },
 };
 ```
 
-This allows us to directly render these attributes onto our HTML inputs via something like `<input name="firstName" {...formValidations.firstName} />`
+This allows us to directly render these attributes onto our HTML inputs internally via something like `<input name="firstName" {...formDefinition.inputs.firstName.validationAttrs} />`
 
-#### Provide your validations via `FormContextProvider`
+#### Provide your validations via `FormProvider`
 
-In order to make these validations easily accessible, we provide them via context that should wrap your underlying `<form>`. We do this with a wrapper component around the actual context for better TypeScript inference.
-
-```jsx
-import { FormContextProvider } from 'remix-validity-state'
-
-<FormContextProvider value={{ formValidations }}>
-  {/* Your <form> goes in here */}
-</FormContextProvider
-```
-
-#### Render `<Field>` Components inside your `FormContextProvider`
+In order to make these validations easily accessible, we provide them via a `<FormProvider>` that should wrap your underlying `<form>` element. We do this with a wrapper component around the actual context for better TypeScript inference.
 
 ```jsx
-<FormContextProvider value={{ formValidations }}>
-  <Field name="firstName" label="First Name" />
-  <Field name="middleInitial" label="Middle Name" />
-  <Field name="lastName" label="Last Name" />
-  <Field name="emailAddress" label="Email Address" />
-</FormContextProvider>
+import { FormProvider } from "remix-validity-state";
+
+function MyFormPage() {
+  return (
+    <FormProvider formDefinition={formDefinition}>
+      {/* Your <form> goes in here */}
+    </FormProvider>
+  );
+}
 ```
 
-The `<Field>` component is our wrapper that handles the `<label>`, `<input>`, and real-time error display. The `name` serves as the key and will look up our validation attributes from context and include them on the underlying `<input />`.
+#### Render `<Field>` Components inside your `FormProvider`
+
+```jsx
+import { FormProvider } from "remix-validity-state";
+
+function MyFormPage() {
+  return (
+    <FormProvider formDefinition={formDefinition}>
+      <Field name="firstName" label="First Name" />
+      <Field name="middleInitial" label="Middle Name" />
+      <Field name="lastName" label="Last Name" />
+      <Field name="emailAddress" label="Email Address" />
+    </FormProvider>
+  );
+}
+```
+
+The `<Field>` component is our wrapper that handles the `<label>`, `<input>`, and real-time error display. The `name` serves as the key and will look up our validation attributes from your `formDefinition` and include them on the underlying `<input />`.
 
 #### Wire up server-side validations
 
-In Remix, your submit your forms to an `action` which receives the `FormData`. In your action, call `validateServerFormData` with the `formData` and your previously defined `formValidations`:
+In Remix, your submit your forms to an `action` which receives the `FormData`. In your action, call `validateServerFormData` with the `formData` and your previously defined `formDefinition`:
 
 ```js
 import { validateServerFormData } from "remix-validity-state";
@@ -144,37 +176,40 @@ export async function action({ request }: ActionArgs) {
   const formData = await request.formData();
   const serverFormInfo = await validateServerFormData(
     formData,
-    formValidations
+    formDefinitions
   );
   if (!serverFormInfo.valid) {
     // Uh oh - we found some errors, send them back up to the UI for display
+    // serverFormInfo contains:
+    //  - submittedValues - all of the form input values submitted in formData
+    //  - inputs - InputInfo objects representing the ValidityState of each input
+    //  - errorMessages - error messages to display
     return json({ serverFormInfo });
   }
   // Congrats!  Your form data is valid - do what ya gotta do with it
 }
 ```
 
-#### Add your server action response to the `FormContext`
+#### Add your server action response to the `FormProvider`
 
-When we validate on the server, we may get errors back that we didn't catch during client-side validation (or we didn't run because JS hadn't yet loaded!). In order to render those, we can provide the response from `validateServerFormData` to our `FormContext` and it'll be used internally. The `serverFormInfo` also contains all of the submitted input values to be pre-populated into the inputs in a no-JS scenario.
+When we validate on the server, we may get errors back that we didn't catch during client-side validation (or we didn't run because JS hadn't yet loaded!). In order to render those, we can provide the response from `validateServerFormData` to our `FormProvider` and it'll be used internally. The `serverFormInfo` also contains all of the submitted input values to be pre-populated into the inputs in a no-JS scenario.
 
 ```js
-import { Field, FormContextProvider } from "remix-validity-state";
+import { Field, FormProvider } from "remix-validity-state";
 
 export default function MyRemixRouteComponent() {
   let actionData = useActionData<typeof action>();
+
   return (
-    <FormContextProvider
-      value={{
-        formValidations,
-        serverFormInfo: actionData?.serverFormInfo,
-      }}
+    <FormProvider
+      formDefinition={formDefinition},
+      serverFormInfo={actionData?.serverFormInfo},
     >
       <Field name="firstName" label="First Name" />
       <Field name="middleInitial" label="Middle Name" />
       <Field name="lastName" label="Last Name" />
       <Field name="emailAddress" label="Email Address" />
-    </FormContextProvider>
+    </FormProvider>
   );
 }
 ```
@@ -208,50 +243,121 @@ let enhancedValidityState = {
 };
 ```
 
-#### Custom Validations
+#### Multiple Inputs with the Same Name
 
-Custom validations are implemented as a sync or async function returning a boolean, and you add them directly into your `formValidations` object where you define HTML validations:
+It's totally valid in HTML to submit multiple inputs with the same name, and they end up in `FormData` and can be accessed as an array using `FormData.getAll()`. To support this, our `serverFormInfo.inputs` and `serverFormInfo.submittedValues` types are both either a value or an array depending on whether we encountered multiple input values for a given name.
 
 ```js
-const formValidations: FormValidations = {
-  name: {
-    required: true,
-    maxLength: 50,
-  },
-  emailAddress: {
-    required: true,
-    maxLength: 50,
-    async uniqueEmail(value) {
-        let res = await fetch(...);
-        let data = await res.json();
-        return data.isUnique === true;
+// consider submitting the following inputs:
+<input name="username" value="brophdawg11" />
+<input name="hobbies" value="golf" />
+<input name="hobbies" value="skiing" />
+<input name="hobbies" value="coding" />
+
+// In your action:
+async function action({ request }) {
+  let formData = await request.formData();
+  let serverFormInfo = validateServerFormInfo(formData, formDefinition);
+  // serverFormInfo will have the shape:
+  // {
+  //    submittedValues: {
+  //      username: 'brophdawg11',
+  //      hobbies: ['golf', 'skiing', 'coding']
+  //    },
+  //    inputs: {
+  //      userName: InputInfo,
+  //      hobbies: [InputInfo, InputInfo, InputInfo]
+  //    }
+  // }
+```
+
+#### Dynamic (Form-Dependent) Validation Attributes
+
+Most of the time, your built-in validation attributes will be static (`required: true` or `malength: 30` etc.). However, sometimes you need the validation attribute to be dependent on the current value of another input in the form. Consider 2 numeric inputs: `low` and `high`. If `low` has a value, then `high` sets it's `min` validation attribute to the value of `low` and vice versa:
+
+```js
+let formDefinition: FormSchema = {
+  inputs: {
+    low: {
+      validationAttrs: {
+        type: "number",
+        max: (fd) => (fd.get("high") ? Number(fd.get("high")) : undefined),
+      },
     },
+    high: {
+      validationAttrs: {
+        type: "number",
+        min: (fd) => (fd.get("low") ? Number(fd.get("low")) : undefined),
+      },
+    },
+  },
+};
+```
+
+In order for dynamic/form-dependent validations like this to work reliably, we have to be able to update one input when the value of _another_ input changes. By default, `useValidatedInput` and `<Field>` are scoped to a single input. So if you are using dynamic built-in validations then you should provide a `<FormProvider formRef>` property with a ref to your form element, that way the library can listen for `change` events and update dependent validations accordingly.
+
+#### Custom Validations
+
+Custom validations are implemented as a sync or async function returning a boolean, and you add them directly into your `formDefinition` object alongside where you define HTML validations:
+
+```js
+const formDefinition: FormSchema = {
+  inputs: {
+    emailAddress: {
+      validationAttrs: {
+        required: true,
+        maxLength: 50,
+      },
+      customValidations: {
+        async uniqueEmail(value) {
+            let res = await fetch(...);
+            let data = await res.json();
+            return data.isUnique === true;
+        },
+      }
   },
 }
 ```
 
 #### Error Messages
 
-Basic error messaging is handled out of the box by `<Field>` for built-in HTML validations. If you are using custom validations, or if you want to override the built-in messaging, you can provide custom error messages through the `<FormContextProvider>`. Custom error messages can either be a static string, or a function that receives the attribute value (built-in validations only), the input name, and the input value:
+Basic error messaging is handled out of the box by `<Field>` for built-in HTML validations. If you are using custom validations, or if you want to override the built-in messaging, you can provide custom error messages in our `formDefinition`. Custom error messages can either be a static string, or a function that receives the attribute value (built-in validations only), the input name, and the input value:
 
-```jsx
-const errorMessages = {
-  valueMissing: "This field is required",
-  tooLong: (attrValue, name, value) =>
-    `The ${name} field can only be up to ${attrValue} characters, ` +
-    `but you have entered ${value.length}`,
-  uniqueEmail: (_, name, value) =>
-    `The email address ${value} is already taken`,
+```ts
+const formDefinition: FormSchema = {
+  inputs: { ... },
+  errorMessages: {
+    valueMissing: "This field is required",
+    tooLong: (attrValue, name, value) =>
+      `The ${name} field can only be up to ${attrValue} characters, ` +
+      `but you have entered ${value.length}`,
+    uniqueEmail: (_, name, value) =>
+      `The email address ${value} is already taken`,
+  }
 };
+```
 
-<FormContextProvider value={{ formValidations, errorMessages }}>
-  ...
-</FormContextProvider>;
+You can also provide field-specific error messages if needed, whioch will override the global error messages:
+
+```ts
+const formDefinition: FormSchema = {
+  inputs: {
+    firstName: {
+      validationAttrs: { ... },
+      errorMessages: {
+        valueMissing: "Please enter a last name!",
+      }
+    }
+  },
+  errorMessages: {
+    valueMissing: "This field is required",
+  }
+};
 ```
 
 #### useValidatedInput()
 
-This is the bread and butter of the library - and `<Field>` is really nothing more than a wrapper around this hook. Let's take a look at what it gives you. The only required input is the input `name`:
+This is the bread and butter of the library - and `<Field>` is really nothing more than a wrapper around this hook. This is useful if you require more control over the direct rendering of your `input`, `label` or error elements. Let's take a look at what it gives you. The only required input is the input `name`:
 
 ```js
 let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } = useValidatedInput({
@@ -306,24 +412,13 @@ Let's look at an example usage:
 </div>
 ```
 
-`useValidatedInput` can also be used instead of `FormContextProvider` for `formValidations` and `serverFormInfo` if necessary:
+`useValidatedInput` can also be used without a `FormProvider` for `formDefinition` and `serverFormInfo` if necessary:
 
 ```js
 let { info } = useValidatedInput({
   name: "emailAddress",
-  formValidations,
+  formDefinition,
   serverFormInfo,
-});
-```
-
-Or, you can pass field-specific error message overrides that will be merged into the `errorMessages` provided by the `FormContext`:
-
-```js
-let { info } = useValidatedInput({
-  name: "emailAddress",
-  errorMessages: {
-    required: "Please provide an email address",
-  },
 });
 ```
 
@@ -348,42 +443,39 @@ This library aims to be pretty hands-off when it comes to styling, since every u
 
 Now, I'm no TypeScript wizard but I have tried to make this library TypeScript friendly, and even got some good feature requests early on (thanks Kent for #7 and #9!). Hopefully over time the types will improve further, but at the moment here's the best way to get type safety and inference.
 
-```ts
-// Define a type for your validations
-type MyValidations = {
-  firstName: Validations;
-  lastName: Validations;
+```tsx
+// Define an interface for your validations thats adheres to the shape of FormDefinition
+interface FormSchema {
+  inputs: {
+    firstName: InputDefinition;
+    lastName: InputDefinition;
+  }
 }
 
-// Create your typed validations
-const formValidations: MyValidations = {
-  firstName: { required: true },
-  lastName: { required: true },
+// Create your form definition
+const formDefinition: FormSchema = {
+  inputs: {
+    firstName: {
+      validationattrs: { required: true },
+    },
+    lastName: {
+      validationattrs: { required: true },
+    },
+  }
 }
 
-// When passing formValidations to context./hooks it will automatically infer
+// When passing formDefinition to context/hooks it will automatically infer
 // your types:
-<FormContextProvider value={{ formValidations }}>
-useValidatedInput({ name: "firstName", formValidations });
+<FormProvider formDefinition={formDefinition} />
+useValidatedInput({ name: "firstName", formDefinition });
 
 // Or if you are using useValidatedInput inside the context, you'll need to
 // use the generic signature:
-useValidatedInput<MyValidations>({ name: 'firstName' });
+useValidatedInput<FormSchema>({ name: 'firstName' });
 
 // Finally, the return type of validateServerFormData will have serverFormInfo.inputs
-// properly typed with your fields
+// and serverFormInfo.submittedValues properly typed with your fields
 ```
-
-## Not Yet Implemented
-
-Currently, this library only supports simple `<input>` elements. The following items are not currently supported, but are planned for any formal v1.0 release:
-
-- [x] Error message interpolation
-- [ ] Radio Buttons
-- [ ] Checkboxes
-- [ ] Select
-- [ ] Textarea
-- [ ] Form level `info.valid` object (for disabling submit etc.)
 
 ## Feedback + Contributing
 
