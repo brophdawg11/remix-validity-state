@@ -29,7 +29,7 @@
   },
   "homepage": "https://github.com/brophdawg11/remix-validity-state#readme",
   "scripts": {
-    "build": "tsc -b && rollup -c ./rollup.config.js",
+    "build": "rollup -c ./rollup.config.js",
     "clean": "rm -rf dist/",
     "dev": "OUTPUT_DIR=demo-app/node_modules/remix-validity-state npm run build -- --watch",
     "lint": "eslint --ext .js,.ts,.tsx .",
@@ -47,6 +47,7 @@
     "@babel/preset-typescript": "7.16.7",
     "@remix-run/eslint-config": "1.3.4",
     "@rollup/plugin-babel": "5.3.1",
+    "@rollup/plugin-typescript": "^11.0.0",
     "@types/react": "^18.0.19",
     "eslint": "8.12.0",
     "eslint-config-prettier": "8.5.0",
