@@ -1,4 +1,5 @@
 import babel from "@rollup/plugin-babel";
+import typescript from "@rollup/plugin-typescript";
 
 import packageJson from "./package.json";
 
@@ -41,6 +42,7 @@ export default function rollup() {
       ],
       external: ["react", "@babel/runtime/helpers/extends"],
       plugins: [
+        typescript(),
         babel({
           exclude: /node_modules/,
           babelHelpers: "runtime",

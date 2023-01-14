@@ -3,9 +3,9 @@ import type { ActionFunction } from "@remix-run/server-runtime";
 import { json, redirect } from "@remix-run/server-runtime";
 import * as React from "react";
 import type {
-  ErrorMessages,
+  ErrorMessage,
+  InputDefinition,
   ServerFormInfo,
-  Validations,
 } from "remix-validity-state";
 import {
   Field,
@@ -14,51 +14,65 @@ import {
   validateServerFormData,
 } from "remix-validity-state";
 
-type MyFormValidations = {
-  firstName: Validations;
-  middleInitial: Validations;
-  lastName: Validations;
-  emailAddress: Validations;
+interface FormSchema {
+  inputs: {
+    firstName: InputDefinition;
+    middleInitial: InputDefinition;
+    lastName: InputDefinition;
+    emailAddress: InputDefinition;
+  };
+  errorMessages: {
+    tooShort: ErrorMessage;
+  };
+}
+
+let formDefinition: FormSchema = {
+  inputs: {
+    firstName: {
+      validationAttrs: {
+        required: true,
+        minLength: 5,
+        pattern: "^[a-zA-Z]+$",
+      },
+    },
+    middleInitial: {
+      validationAttrs: {
+        pattern: "^[a-zA-Z]{1}$",
+      },
+    },
+    lastName: {
+      validationAttrs: {
+        required: true,
+        minLength: 5,
+        pattern: "^[a-zA-Z]+$",
+      },
+    },
+    emailAddress: {
+      validationAttrs: {
+        type: "email",
+        required: true,
+      },
+      customValidations: {
+        async uniqueEmail(value) {
+          await new Promise((r) => setTimeout(r, 1000));
+          return value !== "john@doe.com" && value !== "jane@doe.com";
+        },
+      },
+      errorMessages: {
+        uniqueEmail(attrValue, name, value) {
+          return `The email address "${value}" is already in use!`;
+        },
+      },
+    },
+  },
+  errorMessages: {
+    tooShort: (attrValue, name, value) =>
+      `The ${name} field must be at least ${attrValue} characters long, but you have only entered ${value.length} characters`,
+  },
 };
 
 type ActionData = {
-  serverFormInfo: ServerFormInfo<MyFormValidations>;
-};
-
-// Validations for our entire form, composed of raw HTML validation attributes
-// to be spread directly onto <input>, as well as custo validations that will
-// run both client and server side.
-// Specified in an object here so they can be leveraged for server-side validation
-const formValidations: MyFormValidations = {
-  firstName: {
-    // Standard HTML validations have primitives as their value
-    required: true,
-    minLength: 5,
-    pattern: "^[a-zA-Z]+$",
-  },
-  middleInitial: {
-    pattern: "^[a-zA-Z]{1}$",
-  },
-  lastName: {
-    required: true,
-    minLength: 5,
-    pattern: "^[a-zA-Z]+$",
-  },
-  emailAddress: {
-    type: "email",
-    required: true,
-    async uniqueEmail(value) {
-      await new Promise((r) => setTimeout(r, 1000));
-      return value !== "john@doe.com" && value !== "jane@doe.com";
-    },
-  },
-};
-
-const customErrorMessages: ErrorMessages = {
-  tooShort: (attrValue, name, value) =>
-    `The ${name} field must be at least ${attrValue} characters long, but you have only entered ${value.length} characters`,
-  uniqueEmail: (attrValue, name, value) =>
-    `The email address "${value}" is already in use!`,
+  serverFormInfo: ServerFormInfo<typeof formDefinition>;
 };
 
 export const action: ActionFunction = async ({ request }) => {
@@ -69,10 +83,8 @@ export const action: ActionFunction = async ({ request }) => {
   // We currently only get it back from the server on serverFormInfo.valid.  At
   // the moment, client side the <form> doesn't really know about any of it's
   // descendant inputs.  Maybe we can do a pub/sub through context?
-  const serverFormInfo = await validateServerFormData(
-    formData,
-    formValidations
-  );
+  const serverFormInfo = await validateServerFormData(formData, formDefinition);
+
   if (!serverFormInfo.valid) {
     return json<ActionData>({ serverFormInfo });
   }
@@ -83,12 +95,12 @@ export const action: ActionFunction = async ({ request }) => {
 // DOM construction
 function EmailAddress() {
   let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } =
-    useValidatedInput<MyFormValidations>({ name: "emailAddress" });
+    useValidatedInput<typeof formDefinition>({ name: "emailAddress" });
   return (
     <div>
       <label {...getLabelAttrs()}>Email Address*</label>
       <br />
-      <input {...getInputAttrs({})} />
+      <input {...getInputAttrs()} />
       {info.touched && info.errorMessages ? (
         <ul {...getErrorsAttrs()}>
           {Object.entries(info.errorMessages).map(([validation, msg]) => (
@@ -101,7 +113,8 @@ function EmailAddress() {
 }
 
 export default function Index() {
-  let actionData = useActionData<ActionData>();
+  let actionData = useActionData() as ActionData;
+
   let formRef = React.useRef<HTMLFormElement>(null);
 
   // Use built-in browser validation prior to JS loading, then switch
@@ -200,12 +213,12 @@ export default function Index() {
       <hr />
       <FormContextProvider
         value={{
-          formValidations,
-          errorMessages: customErrorMessages,
+          formDefinition,
           // TODO: Can this case go away?  Seems to be coming from the
           // serialization logic in the useActionData generic
-          serverFormInfo:
-            actionData?.serverFormInfo as ServerFormInfo<MyFormValidations>,
+          serverFormInfo: actionData?.serverFormInfo as ServerFormInfo<
+            typeof formDefinition
+          >,
         }}
       >
         <Form method="post" autoComplete="off" ref={formRef}>
@@ -221,7 +234,10 @@ export default function Index() {
 
           <div className="demo-input-container">
             <p className="demo-input-message">
-              This middle initial input has <code>pattern="^[a-zA-Z]{1}$"</code>
+              This middle initial input has{" "}
+              <code>
+                pattern="^[a-zA-Z]{"{"}1{"}"}$"
+              </code>
             </p>
             <div className="demo-input">
               <Field name="middleInitial" label="Middle Initial" />
@@ -230,7 +246,7 @@ export default function Index() {
 
           <div className="demo-input-container">
             <p className="demo-input-message">
-              This first name input has{" "}
+              This last name input has{" "}
               <code>required="true" minLength="5" pattern="^[a-zA-Z]+$"</code>
             </p>
             <div className="demo-input">
