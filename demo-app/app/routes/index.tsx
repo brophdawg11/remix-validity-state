@@ -2,7 +2,13 @@ import { Form, useActionData } from "@remix-run/react";
 import type { ActionFunction } from "@remix-run/server-runtime";
 import { json, redirect } from "@remix-run/server-runtime";
 import * as React from "react";
-import type { FormDefinition, ServerFormInfo } from "remix-validity-state";
+import type {
+  ErrorMessage,
+  FormDefinition,
+  InputDefinition,
+  InputInfo,
+  ServerFormInfo,
+} from "remix-validity-state";
 import {
   Field,
   FormContextProvider,
@@ -10,7 +16,19 @@ import {
   validateServerFormData,
 } from "remix-validity-state";
 
-let formDefinition: FormDefinition = {
+interface FormSchema {
+  inputs: {
+    firstName: InputDefinition;
+    middleInitial: InputDefinition;
+    lastName: InputDefinition;
+    emailAddress: InputDefinition;
+  };
+  errorMessages: {
+    tooShort: ErrorMessage;
+  };
+}
+
+let formDefinition: FormSchema = {
   inputs: {
     firstName: {
       validationAttrs: {
@@ -69,8 +87,6 @@ export const action: ActionFunction = async ({ request }) => {
   // descendant inputs.  Maybe we can do a pub/sub through context?
   const serverFormInfo = await validateServerFormData(formData, formDefinition);
 
-  // TODO: Type inference is broken here on serverformInfo.inputs.*?
-
   if (!serverFormInfo.valid) {
     return json<ActionData>({ serverFormInfo });
   }
@@ -100,8 +116,6 @@ function EmailAddress() {
 
 export default function Index() {
   let actionData = useActionData() as ActionData;
-
-  // TODO: Type inference is broken here on actionData.serverFormInfo.inputs.*?
 
   let formRef = React.useRef<HTMLFormElement>(null);
 

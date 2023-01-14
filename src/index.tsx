@@ -338,14 +338,18 @@ export async function validateServerFormData<T extends FormDefinition>(
     {}
   );
 
-  const inputs = {} as Record<KeyOf<T["inputs"]>, InputInfo>;
+  // Unsure if there's a better way to do this - but this complains since we
+  // haven't filled in the keys yet
+  // @ts-expect-error
+  const inputs: Record<KeyOf<T["inputs"]>, InputInfo> = {};
+
   let valid = true;
+  let entries = Object.entries(formDefinition.inputs) as Array<
+    [KeyOf<T["inputs"]>, InputDefinition]
+  >;
   await Promise.all(
-    Object.keys(formDefinition.inputs).map(async (name) => {
-      // TODO can we infer this?
-      let inputName = name as KeyOf<T["inputs"]>;
-      let inputDef = formDefinition.inputs[name];
-      const value = formData.get(name);
+    entries.map(async ([inputName, inputDef]) => {
+      const value = formData.get(inputName);
       if (typeof value === "string") {
         let validity = await validateInput(null, value, inputDef, formData);
         // Always assume inputs have been modified during SSR validation
