@@ -13,17 +13,20 @@ type Mutable<T> = {
 // Restrict object keys to strings, and don't permit number/Symbol
 type KeyOf<T> = Extract<keyof T, string>;
 
+// Extract the value type for an object
+type ValueOf<T> = T[keyof T];
+
 /**
  * Validation attributes built-in to the browser
  */
 interface BuiltInValidationAttrs {
-  type?: string;
-  required?: boolean;
-  minLength?: number;
-  maxLength?: number;
-  min?: number;
-  max?: number;
-  pattern?: string;
+  type?: string | ((fd: FormData) => string | null | undefined);
+  required?: boolean | ((fd: FormData) => boolean | null | undefined);
+  minLength?: number | ((fd: FormData) => number | null | undefined);
+  maxLength?: number | ((fd: FormData) => number | null | undefined);
+  min?: number | ((fd: FormData) => number | null | undefined);
+  max?: number | ((fd: FormData) => number | null | undefined);
+  pattern?: string | ((fd: FormData) => string | null | undefined);
 }
 
 type ValidityStateKey = KeyOf<
@@ -121,6 +124,7 @@ interface BuiltInValidator {
 interface FormContextObject<T extends FormDefinition> {
   formDefinition: T;
   serverFormInfo?: ServerFormInfo<T>;
+  forceUpdate: any;
 }
 
 /**
@@ -191,14 +195,14 @@ const builtInValidations: Record<
   min: {
     domKey: "rangeUnderflow",
     validate: (value, attrValue) =>
-      value.length === 0 || Number(value) < Number(attrValue),
+      value.length === 0 || Number(value) >= Number(attrValue),
     errorMessage: (attrValue) =>
       `Value must be greater than or equal to ${attrValue}`,
   },
   max: {
     domKey: "rangeOverflow",
     validate: (value, attrValue) =>
-      value.length === 0 || Number(value) > Number(attrValue),
+      value.length === 0 || Number(value) <= Number(attrValue),
     errorMessage: (attrValue) =>
       `Value must be less than or equal to ${attrValue}`,
   },
@@ -279,18 +283,36 @@ function getBaseValidityState(): ExtendedValidityState {
 }
 
 // Perform all specified html validations for a single input
+// Called in a useEffect client side and from validateServerFormIno server-side
 async function validateInput(
-  inputEl: HTMLInputElement | null,
-  value: string,
+  inputName: string,
   inputDef: InputDefinition,
-  formData?: FormData
+  value: string,
+  inputEl?: HTMLInputElement, // CSR
+  formData?: FormData // SSR
 ): Promise<ExtendedValidityState> {
   let validity = getBaseValidityState();
+
+  if (!formData) {
+    invariant(
+      inputEl?.form,
+      `validateInput expected an inputEl.form to be available for input "${inputName}"`
+    );
+    formData = new FormData(inputEl.form);
+  }
 
   if (inputDef.validationAttrs) {
     for (let _attr of Object.keys(inputDef.validationAttrs)) {
       let attr = _attr as KeyOf<BuiltInValidationAttrs>;
-      let attrValue = inputDef.validationAttrs[attr];
+      let attrValue = calculateValidationAttr(
+        inputDef.validationAttrs[attr],
+        formData
+      );
+      // Undefined attr values means the attribute doesn't exist and there's
+      // nothing to validate
+      if (attrValue == null) {
+        continue;
+      }
       let builtInValidation = builtInValidations[attr];
       let isInvalid = inputEl?.validity
         ? inputEl?.validity[builtInValidation.domKey]
@@ -341,8 +363,16 @@ export async function validateServerFormData<T extends FormDefinition>(
             touched: true,
             dirty: true,
             state: "done",
-            validity: await validateInput(null, value, inputDef, formData),
+            validity: await validateInput(
+              inputName,
+              inputDef,
+              value,
+              undefined,
+              formData
+            ),
           };
+          // Add the values to inputs/submittedValues properly depending on if
+          // we've encountered multiple values for this input name or not
           addValueFromSingleOrMultipleInput(inputName, inputInfo, inputs);
           addValueFromSingleOrMultipleInput(inputName, value, submittedValues);
           valid = valid && inputInfo.validity.valid;
@@ -357,8 +387,9 @@ export async function validateServerFormData<T extends FormDefinition>(
   return { submittedValues, inputs, valid };
 }
 
+// Determine the defaultValue for a rendered input, properly handling inputs
+// with multiple values
 function getInputDefaultValue<T extends FormDefinition>(
-  formDefinitions: T,
   name: string,
   serverFormInfo?: ServerFormInfo<T>,
   index?: number
@@ -375,6 +406,8 @@ function getInputDefaultValue<T extends FormDefinition>(
   }
 }
 
+// Mutate `value` properly depending on whether or not we have multiple values
+// for a given input name
 function addValueFromSingleOrMultipleInput<T>(
   name: string,
   value: T,
@@ -392,6 +425,62 @@ function addValueFromSingleOrMultipleInput<T>(
   }
 }
 
+// Generate a FormData object from our submittedValues structure.  This is
+// needed for the _initial_ render after a document POST submission where we
+// don't yet have an input ref to access the <form>, but we need a FormData
+// instance to determine the initial validation attribute values (in case any
+// are dynamic).  So we can re-construct from what we just submitted.
+// Subsequent renders then use ne wFormData(inputRef.current.form)
+function generateFormDataFromServerFormInfo<T extends FormDefinition>(
+  submittedValues: ServerFormInfo<T>["submittedValues"]
+) {
+  let formData = new FormData();
+  Object.keys(submittedValues).forEach((k) => {
+    let v = submittedValues[k];
+    if (Array.isArray(v)) {
+      v.forEach((v2) => formData.append(k, v2));
+    } else if (typeof v === "string") {
+      formData.set(k, v);
+    }
+  });
+  return formData;
+}
+
+// Calculate a single validation attribute value to render onto an individual input
+function calculateValidationAttr(
+  attrValue: ValueOf<BuiltInValidationAttrs>,
+  formData: FormData
+) {
+  return typeof attrValue === "function" ? attrValue(formData) : attrValue;
+}
+
+// Calculate the validation attribute values to render onto an individual input
+function calculateValidationAttrs<T extends FormDefinition>(
+  validationAttrs: InputDefinition["validationAttrs"],
+  formData: FormData
+) {
+  let entries = Object.entries(validationAttrs || {}) as [
+    KeyOf<BuiltInValidationAttrs>,
+    ValueOf<BuiltInValidationAttrs>
+  ][];
+  return entries.reduce((acc, [attrName, attrValue]) => {
+    let value = calculateValidationAttr(attrValue, formData);
+    if (value != null) {
+      acc[attrName] = value;
+    }
+    return acc;
+  }, {} as Record<string, string | number | boolean>);
+}
+
+// Does our form have any dynamic attribute values that require re-evaluation
+// on all form changes?
+function hasDynamicAttributes(formDefinition: FormDefinition) {
+  return Object.values(formDefinition.inputs).some((inputDef) =>
+    Object.values(inputDef.validationAttrs || {}).some(
+      (attr) => typeof attr === "function"
+    )
+  );
+}
 //#endregion
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -429,6 +518,7 @@ interface UseValidatedInputOpts<T extends FormDefinition> {
     | React.ForwardedRef<HTMLInputElement | null | undefined>
     | React.Ref<HTMLInputElement | null | undefined>;
   index?: number;
+  forceUpdate?: any;
 }
 
 // Handle validations for a single input
@@ -439,11 +529,19 @@ export function useValidatedInput<T extends FormDefinition>(
   let id = React.useId();
   let name = opts.name;
   let formDefinition = opts.formDefinition || ctx?.formDefinition;
+  let forceUpdate = opts.forceUpdate || ctx?.forceUpdate;
 
   invariant(
     formDefinition,
     "useValidatedInput() must either be used inside a <FormContext.Provider> " +
       "or be passed a `formDefinition` object"
+  );
+
+  let inputDef = formDefinition.inputs[name];
+
+  invariant(
+    inputDef,
+    `useValidatedInput() could not find a corresponding definition for the "${name}" input`
   );
 
   let errorMessages = (key: ValidityStateKey, inputName: KeyOf<T["inputs"]>) =>
@@ -491,8 +589,19 @@ export function useValidatedInput<T extends FormDefinition>(
     InputInfo["validity"] | undefined
   >(serverValidity);
   let controller = React.useRef<AbortController | null>(null);
-  let currentErrorMessages: Record<string, string> | undefined;
 
+  let formData = inputRef.current?.form
+    ? new FormData(inputRef.current.form)
+    : serverFormInfo
+    ? generateFormDataFromServerFormInfo(serverFormInfo.submittedValues)
+    : new FormData();
+
+  let validationAttrs = calculateValidationAttrs(
+    inputDef.validationAttrs,
+    formData
+  );
+
+  let currentErrorMessages: Record<string, string> | undefined;
   if (validity?.valid === false) {
     currentErrorMessages = Object.entries(validity)
       .filter((e) => e[0] !== "valid" && e[1])
@@ -504,8 +613,7 @@ export function useValidatedInput<T extends FormDefinition>(
           errorMessages(validation as ValidityStateKey, name) ||
           builtInValidations[attr]?.errorMessage;
         if (typeof message === "function") {
-          let attrValue =
-            formDefinition?.inputs?.[name]?.validationAttrs?.[attr];
+          let attrValue = validationAttrs[attr];
           message = message(
             attrValue ? String(attrValue) : undefined,
             name,
@@ -570,8 +678,7 @@ export function useValidatedInput<T extends FormDefinition>(
       }
 
       // Validate the input
-      let inputValidations = formDefinition?.inputs[name];
-      if (!inputValidations) {
+      if (!inputDef) {
         console.warn(`No validations found for the "${name}" input`);
         setValidationState("done");
         return;
@@ -580,9 +687,10 @@ export function useValidatedInput<T extends FormDefinition>(
       controller.current = localController;
       setValidationState("validating");
       const validity = await validateInput(
-        inputRef.current,
+        name,
+        inputDef,
         value,
-        inputValidations
+        inputRef.current || undefined
       );
       if (localController.signal.aborted) {
         return;
@@ -594,15 +702,10 @@ export function useValidatedInput<T extends FormDefinition>(
     go().catch((e) => console.error("Error in validateInput useEffect", e));
 
     return () => controller.current?.abort();
-  }, [
-    dirty,
-    touched,
-    value,
-    formDefinition,
-    name,
-    serverFormInfo,
-    serverValidity,
-  ]);
+
+    // Important: forceUpdate must remain included in the deps array for
+    // auto-revalidation on dynamic attribute value changes
+  }, [forceUpdate, name, inputDef, value, serverFormInfo, serverValidity]);
 
   function getClasses(type: "label" | "input", className?: string) {
     return composeClassNames([
@@ -619,20 +722,12 @@ export function useValidatedInput<T extends FormDefinition>(
   function getInputAttrs({
     ...attrs
   }: React.ComponentPropsWithoutRef<"input"> = {}): React.ComponentPropsWithoutRef<"input"> {
-    let validationAttrs = Object.entries(
-      formDefinition?.inputs[name]?.validationAttrs || {}
-    ).reduce((acc, [attr, value]) => Object.assign(acc, { [attr]: value }), {});
     let inputAttrs = {
       ref: composedRef,
       name,
       id: getInputId(name, id),
       className: getClasses("input", attrs.className),
-      defaultValue: getInputDefaultValue(
-        formDefinition!,
-        name,
-        serverFormInfo,
-        opts.index
-      ),
+      defaultValue: getInputDefaultValue(name, serverFormInfo, opts.index),
       ...(showErrors
         ? {
             "aria-invalid": true,
@@ -685,6 +780,45 @@ export function useValidatedInput<T extends FormDefinition>(
   };
 }
 
+export interface FormProviderProps<
+  T extends FormDefinition
+> extends React.PropsWithChildren<{
+    formDefinition: T;
+    serverFormInfo: ServerFormInfo<T>;
+    formRef?: React.RefObject<HTMLFormElement>;
+  }> {}
+
+export function FormProvider<T extends FormDefinition>(
+  props: FormProviderProps<T>
+) {
+  // If we have inputs using dynamic attributes, then we need to be able to
+  // trigger re-renders o those inputs at a higher level an time the formData
+  // changes, in case the dynamic attributes values need to be updated.
+  let [forcedUpdate, forceUpdate] = React.useState({});
+  React.useEffect(() => {
+    let formEl = props.formRef?.current;
+    if (!formEl || !hasDynamicAttributes(props.formDefinition)) {
+      return;
+    }
+    let handler = () => forceUpdate({});
+    formEl.addEventListener("change", handler, { capture: true });
+    return () =>
+      formEl?.removeEventListener("change", handler, { capture: true });
+  }, [props.formDefinition, props.formRef]);
+
+  return (
+    <FormContext.Provider
+      value={{
+        formDefinition: props.formDefinition,
+        serverFormInfo: props.serverFormInfo,
+        forceUpdate: forcedUpdate,
+      }}
+    >
+      {props.children}
+    </FormContext.Provider>
+  );
+}
+
 export interface FieldProps<T extends FormDefinition>
   extends UseValidatedInputOpts<T>,
     Omit<React.ComponentPropsWithoutRef<"input">, "name"> {
@@ -722,12 +856,7 @@ export function Field<T extends FormDefinition>({
       </label>
       <input
         {...getInputAttrs({
-          defaultValue: getInputDefaultValue(
-            formDefinition,
-            name,
-            serverFormInfo,
-            index
-          ),
+          defaultValue: getInputDefaultValue(name, serverFormInfo, index),
           ...inputAttrs,
         })}
       />

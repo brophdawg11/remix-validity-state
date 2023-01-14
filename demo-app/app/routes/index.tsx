@@ -9,7 +9,7 @@ import type {
 } from "remix-validity-state";
 import {
   Field,
-  FormContextProvider,
+  FormProvider,
   useValidatedInput,
   validateServerFormData,
 } from "remix-validity-state";
@@ -21,6 +21,8 @@ interface FormSchema {
     lastName: InputDefinition;
     emailAddress: InputDefinition;
     hobby: InputDefinition;
+    low: InputDefinition;
+    high: InputDefinition;
   };
   errorMessages: {
     tooShort: ErrorMessage;
@@ -70,15 +72,23 @@ let formDefinition: FormSchema = {
         required: true,
       },
     },
+    low: {
+      validationAttrs: {
+        type: "number",
+        max: (fd) => (fd.get("high") ? Number(fd.get("high")) : undefined),
+      },
+    },
+    high: {
+      validationAttrs: {
+        type: "number",
+        min: (fd) => (fd.get("low") ? Number(fd.get("low")) : undefined),
+      },
+    },
   },
   errorMessages: {
     tooShort: (attrValue, name, value) =>
       `The ${name} field must be at least ${attrValue} characters long, but you have only entered ${value.length} characters`,
   },
-};
-
-type ActionData = {
-  serverFormInfo: ServerFormInfo<typeof formDefinition>;
 };
 
 export const action = async ({ request }: ActionArgs) => {
@@ -217,15 +227,12 @@ export default function Index() {
         .
       </p>
       <hr />
-      <FormContextProvider
-        value={{
-          formDefinition,
-          // TODO: Can this case go away?  Seems to be coming from the
-          // serialization logic in the useActionData generic
-          serverFormInfo: actionData?.serverFormInfo as ServerFormInfo<
-            typeof formDefinition
-          >,
-        }}
+      <FormProvider
+        formDefinition={formDefinition}
+        serverFormInfo={
+          actionData?.serverFormInfo as ServerFormInfo<typeof formDefinition>
+        }
+        formRef={formRef}
       >
         <Form method="post" autoComplete="off" ref={formRef}>
           <div className="demo-input-container">
@@ -288,9 +295,20 @@ export default function Index() {
             </div>
           </div>
 
+          <div className="demo-input-container">
+            <p className="demo-input-message">
+              These low/high inputs use dynamic <code>min</code>/
+              <code>max</code> attributes based on the value of the other input
+            </p>
+            <div className="demo-input">
+              <Field name="low" label="Low" />
+              <Field name="high" label="High" />
+            </div>
+          </div>
+
           <button type="submit">Submit</button>
         </Form>
-      </FormContextProvider>
+      </FormProvider>
     </div>
   );
 }
