@@ -20,6 +20,7 @@ interface FormSchema {
     middleInitial: InputDefinition;
     lastName: InputDefinition;
     emailAddress: InputDefinition;
+    hobby: InputDefinition;
   };
   errorMessages: {
     tooShort: ErrorMessage;
@@ -62,6 +63,11 @@ let formDefinition: FormSchema = {
         uniqueEmail(attrValue, name, value) {
           return `The email address "${value}" is already in use!`;
         },
+      },
+    },
+    hobby: {
+      validationAttrs: {
+        required: true,
       },
     },
   },
@@ -268,6 +274,17 @@ export default function Index() {
             </p>
             <div className="demo-input">
               <EmailAddress />
+            </div>
+          </div>
+
+          <div className="demo-input-container">
+            <p className="demo-input-message">
+              Each of these hobby inputs has <code>required="true"</code>
+            </p>
+            <div className="demo-input">
+              <Field name="hobby" label="Hobby #1" index={0} />
+              <Field name="hobby" label="Hobby #2" index={1} />
+              <Field name="hobby" label="Hobby #3" index={2} />
             </div>
           </div>
 
