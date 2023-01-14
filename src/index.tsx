@@ -455,7 +455,7 @@ function calculateValidationAttr(
 }
 
 // Calculate the validation attribute values to render onto an individual input
-function calculateValidationAttrs<T extends FormDefinition>(
+function calculateValidationAttrs(
   validationAttrs: InputDefinition["validationAttrs"],
   formData: FormData
 ) {
