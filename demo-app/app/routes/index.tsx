@@ -11,6 +11,7 @@ import {
   Field,
   FormProvider,
   useValidatedInput,
+  useValidatedTextArea,
   validateServerFormData,
 } from "remix-validity-state";
 
@@ -20,6 +21,7 @@ interface FormSchema {
     middleInitial: InputDefinition;
     lastName: InputDefinition;
     emailAddress: InputDefinition;
+    story: InputDefinition;
     hobby: InputDefinition;
     low: InputDefinition;
     high: InputDefinition;
@@ -65,6 +67,12 @@ let formDefinition: FormSchema = {
         uniqueEmail(attrValue, name, value) {
           return `The email address "${value}" is already in use!`;
         },
+      },
+    },
+    story: {
+      validationAttrs: {
+        required: true,
+        minLength: 10,
       },
     },
     hobby: {
@@ -117,6 +125,27 @@ function EmailAddress() {
       <label {...getLabelAttrs()}>Email Address*</label>
       <br />
       <input {...getInputAttrs()} />
+      {info.touched && info.errorMessages ? (
+        <ul {...getErrorsAttrs()}>
+          {Object.entries(info.errorMessages).map(([validation, msg]) => (
+            <li key={validation}>🆘 {msg}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+// This is a more complex example of skipping <Field/> in favor of manual
+// DOM construction
+function Story() {
+  let { info, getTextAreaAttrs, getLabelAttrs, getErrorsAttrs } =
+    useValidatedTextArea<typeof formDefinition>({ name: "story" });
+  return (
+    <div>
+      <label {...getLabelAttrs()}>Story*</label>
+      <br />
+      <textarea {...getTextAreaAttrs({ rows: 10, cols: 100 })} />
       {info.touched && info.errorMessages ? (
         <ul {...getErrorsAttrs()}>
           {Object.entries(info.errorMessages).map(([validation, msg]) => (
@@ -281,6 +310,15 @@ export default function Index() {
             </p>
             <div className="demo-input">
               <EmailAddress />
+            </div>
+          </div>
+
+          <div className="demo-input-container">
+            <p className="demo-input-message">
+              This story textarea is required with a minlength of 10
+            </p>
+            <div className="demo-input">
+              <Story />
             </div>
           </div>
 

@@ -94,13 +94,14 @@ type MutableValidityState = Mutable<ValidityState>;
 export type ExtendedValidityState = MutableValidityState &
   Record<string, boolean>;
 
+export type AsyncValidationState = "idle" | "validating" | "done";
 /**
  * Client-side state of the input
  */
 export interface InputInfo {
   touched: boolean;
   dirty: boolean;
-  state: "idle" | "validating" | "done";
+  state: AsyncValidationState;
   validity?: ExtendedValidityState;
   errorMessages?: Record<string, string>;
 }
@@ -290,7 +291,7 @@ async function validateInput(
   inputName: string,
   inputDef: InputDefinition,
   value: string,
-  inputEl?: HTMLInputElement, // CSR
+  inputEl?: HTMLInputElement | HTMLTextAreaElement, // CSR
   formData?: FormData // SSR
 ): Promise<ExtendedValidityState> {
   let validity = getBaseValidityState();
@@ -483,6 +484,53 @@ function hasDynamicAttributes(formDefinition: FormDefinition) {
     )
   );
 }
+
+function getClasses(
+  info: InputInfo,
+  type: "label" | "input" | "textarea",
+  className?: string
+) {
+  let { validity, state, touched, dirty } = info;
+  return composeClassNames([
+    `rvs-${type}`,
+    shouldShowErrors(validity, state, touched) ? `rvs-${type}--invalid` : "",
+    state === "validating" ? `rvs-${type}--validating` : "",
+    touched ? `rvs-${type}--touched` : "",
+    dirty ? `rvs-${type}--dirty` : "",
+    className,
+  ]);
+}
+
+function shouldShowErrors(
+  validity: ExtendedValidityState | undefined,
+  state: AsyncValidationState,
+  touched: boolean
+) {
+  return validity?.valid === false && state === "done" && touched;
+}
+
+function getControlAttrs<T extends SupportedControlTypes>(
+  ctx: ReturnType<typeof useValidatedControl>,
+  controlType: T,
+  name?: string,
+  className?: string,
+  index?: number
+) {
+  return {
+    ref: ctx.composedRef,
+    name: ctx.name,
+    id: getInputId(ctx.name, ctx.id),
+    className: getClasses(ctx.info, controlType, className),
+    defaultValue: getInputDefaultValue(ctx.name, ctx.serverFormInfo, index),
+    ...(shouldShowErrors(ctx.info.validity, ctx.info.state, ctx.info.touched)
+      ? {
+          "aria-invalid": true,
+          "aria-errormessage": getErrorsId(name || ctx.name, ctx.id),
+        }
+      : {}),
+    ...ctx.validationAttrs,
+  };
+}
 //#endregion
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -503,21 +551,27 @@ export function useOptionalFormContext<
   return null;
 }
 
-interface UseValidatedInputOpts<T extends FormDefinition> {
+type SupportedControlTypes = "input" | "textarea";
+type SupportedHTMLElements = HTMLInputElement | HTMLTextAreaElement;
+interface UseValidatedControlOpts<
+  T extends FormDefinition,
+  E extends SupportedHTMLElements
+> {
   name: KeyOf<T["inputs"]>;
   formDefinition?: T;
   serverFormInfo?: ServerFormInfo<T>;
   ref?:
-    | React.ForwardedRef<HTMLInputElement | null | undefined>
-    | React.Ref<HTMLInputElement | null | undefined>;
+    | React.ForwardedRef<E | null | undefined>
+    | React.Ref<E | null | undefined>;
   index?: number;
   forceUpdate?: any;
 }
 
-// Handle validations for a single input
-export function useValidatedInput<T extends FormDefinition>(
-  opts: UseValidatedInputOpts<T>
-) {
+// Handle validations for a single form control
+function useValidatedControl<
+  T extends FormDefinition,
+  E extends SupportedHTMLElements
+>(opts: UseValidatedControlOpts<T, E>) {
   let ctx = useOptionalFormContext<T>();
   let name = opts.name;
   let formDefinition = opts.formDefinition || ctx?.formDefinition;
@@ -571,7 +625,7 @@ export function useValidatedInput<T extends FormDefinition>(
   let prevServerFormInfo = React.useRef<ServerFormInfo<T> | undefined>(
     serverFormInfo
   );
-  let inputRef = React.useRef<HTMLInputElement>(null);
+  let inputRef = React.useRef<E>(null);
   let composedRef = useComposedRefs(inputRef, opts.ref);
   let [value, setValue] = React.useState(serverValue || "");
   let [dirty, setDirty] = React.useState<boolean>(wasSubmitted);
@@ -620,9 +674,6 @@ export function useValidatedInput<T extends FormDefinition>(
       }, {});
   }
 
-  let showErrors =
-    validity?.valid === false && validationState === "done" && touched;
-
   // Set InputInfo.touched on `blur` events
   React.useEffect(() => {
     let inputEl = inputRef.current;
@@ -634,13 +685,13 @@ export function useValidatedInput<T extends FormDefinition>(
     return () => inputEl?.removeEventListener("blur", handler);
   }, [inputRef]);
 
-  // Set value and InputInfo.dirst on `input` events
+  // Set value and InputInfo.dirty on `input` events
   React.useEffect(() => {
     let inputEl = inputRef.current;
     if (!inputEl) {
       return;
     }
-    let handler = function (this: HTMLInputElement) {
+    let handler = function (this: E) {
       setDirty(true);
       setValue(this.value);
     };
@@ -704,46 +755,20 @@ export function useValidatedInput<T extends FormDefinition>(
     // auto-revalidation on dynamic attribute value changes
   }, [forceUpdate, name, inputDef, value, serverFormInfo, serverValidity]);
 
-  function getClasses(type: "label" | "input", className?: string) {
-    return composeClassNames([
-      `rvs-${type}`,
-      showErrors ? `rvs-${type}--invalid` : "",
-      validationState === "validating" ? `rvs-${type}--validating` : "",
-      touched ? `rvs-${type}--touched` : "",
-      dirty ? `rvs-${type}--dirty` : "",
-      className,
-    ]);
-  }
-
-  // Provide the caller a prop getter to be spread onto the <input>
-  function getInputAttrs({
-    ...attrs
-  }: React.ComponentPropsWithoutRef<"input"> = {}): React.ComponentPropsWithoutRef<"input"> {
-    let inputAttrs = {
-      ref: composedRef,
-      name,
-      id: getInputId(name, id),
-      className: getClasses("input", attrs.className),
-      defaultValue: getInputDefaultValue(name, serverFormInfo, opts.index),
-      ...(showErrors
-        ? {
-            "aria-invalid": true,
-            "aria-errormessage": getErrorsId(attrs.name || name, id),
-          }
-        : {}),
-      ...validationAttrs,
-      ...omit(attrs, "className", "ref"),
-    };
-
-    return inputAttrs;
-  }
+  let info: InputInfo = {
+    dirty,
+    touched,
+    state: validationState,
+    validity,
+    errorMessages: currentErrorMessages,
+  };
 
   // Provide the caller a prop getter to be spread onto the <label>
   function getLabelAttrs({
     ...attrs
   }: React.ComponentPropsWithoutRef<"label"> = {}): React.ComponentPropsWithoutRef<"label"> {
     return {
-      className: getClasses("label", attrs.className),
+      className: getClasses(info, "label", attrs.className),
       htmlFor: getInputId(name, id),
       ...omit(attrs, "className"),
     };
@@ -757,23 +782,109 @@ export function useValidatedInput<T extends FormDefinition>(
     return {
       className: composeClassNames(["rvs-errors", attrs.className]),
       id: getErrorsId(name, id),
-      ...(showErrors ? { role: "alert" } : {}),
+      ...(shouldShowErrors(info.validity, info.state, info.touched)
+        ? { role: "alert" }
+        : {}),
       ...omit(attrs, "className"),
     };
   }
 
   return {
-    info: {
-      dirty,
-      touched,
-      state: validationState,
-      validity,
-      errorMessages: currentErrorMessages,
-    } as InputInfo,
+    name,
+    id,
+    validationAttrs,
+    composedRef,
+    info,
+    serverFormInfo,
     controller,
-    getInputAttrs,
     getLabelAttrs,
     getErrorsAttrs,
+  };
+}
+
+interface UseValidatedInputOpts<T extends FormDefinition> {
+  name: KeyOf<T["inputs"]>;
+  formDefinition?: T;
+  serverFormInfo?: ServerFormInfo<T>;
+  ref?:
+    | React.ForwardedRef<HTMLInputElement | null | undefined>
+    | React.Ref<HTMLInputElement | null | undefined>;
+  index?: number;
+  forceUpdate?: any;
+}
+
+// User-facing useValidatedControl wrapper for <input> elements
+export function useValidatedInput<T extends FormDefinition>(
+  opts: UseValidatedInputOpts<T>
+) {
+  let ctx = useValidatedControl<T, HTMLInputElement>(opts);
+
+  // Provide the caller a prop getter to be spread onto the <input>
+  function getInputAttrs({
+    ...attrs
+  }: React.ComponentPropsWithoutRef<"input"> = {}): React.ComponentPropsWithoutRef<"input"> {
+    let controlAttrs = getControlAttrs(
+      ctx,
+      "input",
+      attrs.name,
+      attrs.className,
+      opts.index
+    );
+    return {
+      ...controlAttrs,
+      ...omit(attrs, "className", "ref"),
+    };
+  }
+
+  return {
+    info: ctx.info,
+    controller: ctx.controller,
+    getLabelAttrs: ctx.getLabelAttrs,
+    getErrorsAttrs: ctx.getErrorsAttrs,
+    getInputAttrs,
+  };
+}
+
+interface UseValidatedTextAreaOpts<T extends FormDefinition> {
+  name: KeyOf<T["inputs"]>;
+  formDefinition?: T;
+  serverFormInfo?: ServerFormInfo<T>;
+  ref?:
+    | React.ForwardedRef<HTMLTextAreaElement | null | undefined>
+    | React.Ref<HTMLTextAreaElement | null | undefined>;
+  index?: number;
+  forceUpdate?: any;
+}
+
+// User-facing useValidatedControl wrapper for <textarea> elements
+export function useValidatedTextArea<T extends FormDefinition>(
+  opts: UseValidatedTextAreaOpts<T>
+) {
+  let ctx = useValidatedControl<T, HTMLTextAreaElement>(opts);
+
+  // Provide the caller a prop getter to be spread onto the <textarea>
+  function getTextAreaAttrs({
+    ...attrs
+  }: React.ComponentPropsWithoutRef<"textarea"> = {}): React.ComponentPropsWithoutRef<"textarea"> {
+    let controlAttrs = getControlAttrs(
+      ctx,
+      "textarea",
+      attrs.name,
+      attrs.className,
+      opts.index
+    );
+    return {
+      ...controlAttrs,
+      ...omit(attrs, "className", "ref"),
+    };
+  }
+
+  return {
+    info: ctx.info,
+    controller: ctx.controller,
+    getLabelAttrs: ctx.getLabelAttrs,
+    getErrorsAttrs: ctx.getErrorsAttrs,
+    getTextAreaAttrs,
   };
 }
 
@@ -816,6 +927,52 @@ export function FormProvider<T extends FormDefinition>(
   );
 }
 
+export interface ControlWrapperProps<
+  T extends FormDefinition
+> extends React.PropsWithChildren<{
+    name: string;
+    label?: string;
+    labelAttrs: React.ComponentPropsWithoutRef<"label">;
+    errorAttrs: React.ComponentPropsWithoutRef<"ul">;
+    formDefinition?: T;
+    serverFormInfo?: ServerFormInfo<T>;
+    info: InputInfo;
+  }> {}
+
+// Internal utility component to handle <label> and error displays while leaving
+// the <input></<textarea> control rendering to the calling component
+function ControlWrapper<T extends FormDefinition>({
+  name,
+  label,
+  labelAttrs,
+  errorAttrs,
+  formDefinition,
+  serverFormInfo,
+  info,
+  children,
+}: ControlWrapperProps<T>) {
+  invariant(
+    formDefinition,
+    `No form definition found for form control with name "${name}">`
+  );
+
+  let showErrors = serverFormInfo != null || info.touched;
+
+  return (
+    <>
+      {label ? (
+        <label {...labelAttrs}>
+          {label}
+          {formDefinition.inputs[name]?.validationAttrs?.required ? "*" : null}
+        </label>
+      ) : null}
+      {children}
+      {/* Display validation state */}
+      {showErrors ? <FieldErrors info={info} {...errorAttrs} /> : null}
+    </>
+  );
+}
+
 export interface FieldProps<T extends FormDefinition>
   extends UseValidatedInputOpts<T>,
     Omit<React.ComponentPropsWithoutRef<"input">, "name"> {
@@ -838,29 +995,65 @@ export function Field<T extends FormDefinition>({
   let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } =
     useValidatedInput({ name, formDefinition, serverFormInfo, index });
 
-  invariant(
-    formDefinition,
-    `No form definition found for <Field name="${name}">`
-  );
-
-  let showErrors = serverFormInfo != null || info.touched;
-
   return (
-    <>
-      <label {...getLabelAttrs()}>
-        {label}
-        {formDefinition.inputs[name]?.validationAttrs?.required ? "*" : null}
-      </label>
+    <ControlWrapper
+      name={name}
+      label={label}
+      labelAttrs={getLabelAttrs()}
+      errorAttrs={getErrorsAttrs()}
+      formDefinition={formDefinition}
+      serverFormInfo={serverFormInfo}
+      info={info}
+    >
       <input
         {...getInputAttrs({
           defaultValue: getInputDefaultValue(name, serverFormInfo, index),
           ...inputAttrs,
         })}
       />
+    </ControlWrapper>
+  );
+}
 
-      {/* Display validation state */}
-      {showErrors ? <FieldErrors info={info} {...getErrorsAttrs()} /> : null}
-    </>
+export interface TextAreaProps<T extends FormDefinition>
+  extends UseValidatedInputOpts<T>,
+    Omit<React.ComponentPropsWithoutRef<"textarea">, "name"> {
+  label: string;
+  index?: number;
+}
+
+// Syntactic sugar component to handle <label>/<input> and error displays
+export function TextArea<T extends FormDefinition>({
+  name,
+  formDefinition: formDefinitionProp,
+  serverFormInfo: serverFormInfoProp,
+  label,
+  index,
+  ...inputAttrs
+}: TextAreaProps<T>) {
+  let ctx = useOptionalFormContext<T>();
+  let formDefinition = formDefinitionProp || ctx?.formDefinition;
+  let serverFormInfo = serverFormInfoProp || ctx?.serverFormInfo;
+  let { info, getTextAreaAttrs, getLabelAttrs, getErrorsAttrs } =
+    useValidatedTextArea({ name, formDefinition, serverFormInfo, index });
+
+  return (
+    <ControlWrapper
+      name={name}
+      label={label}
+      labelAttrs={getLabelAttrs()}
+      errorAttrs={getErrorsAttrs()}
+      formDefinition={formDefinition}
+      serverFormInfo={serverFormInfo}
+      info={info}
+    >
+      <textarea
+        {...getTextAreaAttrs({
+          defaultValue: getInputDefaultValue(name, serverFormInfo, index),
+          ...inputAttrs,
+        })}
+      />
+    </ControlWrapper>
   );
 }
 
