@@ -19,7 +19,7 @@
       - [Add your server action response to the `FormProvider`](#add-your-server-action-response-to-the-formprovider)
       - [That's it!](#thats-it)
     - [Advanced Usages and Concepts](#advanced-usages-and-concepts)
-      - [`EnhancedValidityState`](#enhancedvaliditystate)
+      - [`ExtendedValidityState`](#extendedvaliditystate)
       - [Multiple Inputs with the Same Name](#multiple-inputs-with-the-same-name)
       - [Dynamic (Form-Dependent) Validation Attributes](#dynamic-form-dependent-validation-attributes)
       - [Custom Validations](#custom-validations)
@@ -220,12 +220,12 @@ You've now got a real-time client-side validated form wired up with your rock-so
 
 ### Advanced Usages and Concepts
 
-#### `EnhancedValidityState`
+#### `ExtendedValidityState`
 
-Internally, we use what we call an `EnhancedValidityState` data structure which is the same format as `ValidityState`, plus any additional custom validations. This looks like the following:
+Internally, we use what we call an `ExtendedValidityState` data structure which is the same format as `ValidityState`, plus any additional custom validations. This looks like the following:
 
 ```js
-let enhancedValidityState = {
+let extendedValidityState = {
   badInput: false, // currently unused
   customError: false, // currently unused
   rangeOverflow: false, // Did we fail 'max'?
@@ -377,8 +377,8 @@ interface InputInfo {
   // custom async validations
   state: "idle" | "validating" | "done";
   // The current validity state of our input
-  validity?: EnhancedValidityState;
-  // Map of EnhancedValidityState validation name -> error message for all current errors
+  validity?: ExtendedValidityState;
+  // Map of ExtendedValidityState validation name -> error message for all current errors
   errorMessages?: Record<string, string>;
 }
 ```
