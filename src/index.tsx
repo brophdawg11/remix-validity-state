@@ -16,6 +16,12 @@ type KeyOf<T> = Extract<keyof T, string>;
 // Extract the value type for an object
 type ValueOf<T> = T[keyof T];
 
+type SupportedControlTypes = "input" | "textarea" | "select";
+type SupportedHTMLElements =
+  | HTMLInputElement
+  | HTMLTextAreaElement
+  | HTMLSelectElement;
+
 /**
  * Validation attributes built-in to the browser
  */
@@ -27,6 +33,9 @@ interface BuiltInValidationAttrs {
   maxLength?: number | BuiltInValidationAttrsFunction<number>;
   min?: number | BuiltInValidationAttrsFunction<number>;
   max?: number | BuiltInValidationAttrsFunction<number>;
+  // TODO: Pattern not valid on select/textarea - can we enforce this via types?
+  // Set up a discriminated union in InputDefinition based on element:'select'?
+  // https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/pattern
   pattern?: string | BuiltInValidationAttrsFunction<string>;
 }
 
@@ -291,7 +300,7 @@ async function validateInput(
   inputName: string,
   inputDef: InputDefinition,
   value: string,
-  inputEl?: HTMLInputElement | HTMLTextAreaElement, // CSR
+  inputEl?: SupportedHTMLElements, // CSR
   formData?: FormData // SSR
 ): Promise<ExtendedValidityState> {
   let validity = getBaseValidityState();
@@ -487,7 +496,7 @@ function hasDynamicAttributes(formDefinition: FormDefinition) {
 
 function getClasses(
   info: InputInfo,
-  type: "label" | "input" | "textarea",
+  type: "label" | SupportedControlTypes,
   className?: string
 ) {
   let { validity, state, touched, dirty } = info;
@@ -551,8 +560,6 @@ export function useOptionalFormContext<
   return null;
 }
 
-type SupportedControlTypes = "input" | "textarea";
-type SupportedHTMLElements = HTMLInputElement | HTMLTextAreaElement;
 interface UseValidatedControlOpts<
   T extends FormDefinition,
   E extends SupportedHTMLElements
@@ -888,6 +895,49 @@ export function useValidatedTextArea<T extends FormDefinition>(
   };
 }
 
+interface UseValidatedSelectOpts<T extends FormDefinition> {
+  name: KeyOf<T["inputs"]>;
+  formDefinition?: T;
+  serverFormInfo?: ServerFormInfo<T>;
+  ref?:
+    | React.ForwardedRef<HTMLSelectElement | null | undefined>
+    | React.Ref<HTMLSelectElement | null | undefined>;
+  index?: number;
+  forceUpdate?: any;
+}
+
+// User-facing useValidatedControl wrapper for <textarea> elements
+export function useValidatedSelect<T extends FormDefinition>(
+  opts: UseValidatedSelectOpts<T>
+) {
+  let ctx = useValidatedControl<T, HTMLSelectElement>(opts);
+
+  // Provide the caller a prop getter to be spread onto the <textarea>
+  function getSelectAttrs({
+    ...attrs
+  }: React.ComponentPropsWithoutRef<"select"> = {}): React.ComponentPropsWithoutRef<"select"> {
+    let controlAttrs = getControlAttrs(
+      ctx,
+      "select",
+      attrs.name,
+      attrs.className,
+      opts.index
+    );
+    return {
+      ...controlAttrs,
+      ...omit(attrs, "className", "ref"),
+    };
+  }
+
+  return {
+    info: ctx.info,
+    controller: ctx.controller,
+    getLabelAttrs: ctx.getLabelAttrs,
+    getErrorsAttrs: ctx.getErrorsAttrs,
+    getSelectAttrs,
+  };
+}
+
 export interface FormProviderProps<
   T extends FormDefinition
 > extends React.PropsWithChildren<{
@@ -1053,6 +1103,51 @@ export function TextArea<T extends FormDefinition>({
           ...inputAttrs,
         })}
       />
+    </ControlWrapper>
+  );
+}
+
+export interface SelectProps<T extends FormDefinition>
+  extends UseValidatedSelectOpts<T>,
+    Omit<React.ComponentPropsWithoutRef<"select">, "name"> {
+  label: string;
+  index?: number;
+}
+
+// Syntactic sugar component to handle <label>/<input> and error displays
+export function Select<T extends FormDefinition>({
+  name,
+  formDefinition: formDefinitionProp,
+  serverFormInfo: serverFormInfoProp,
+  label,
+  index,
+  children,
+  ...inputAttrs
+}: SelectProps<T>) {
+  let ctx = useOptionalFormContext<T>();
+  let formDefinition = formDefinitionProp || ctx?.formDefinition;
+  let serverFormInfo = serverFormInfoProp || ctx?.serverFormInfo;
+  let { info, getSelectAttrs, getLabelAttrs, getErrorsAttrs } =
+    useValidatedSelect({ name, formDefinition, serverFormInfo, index });
+
+  return (
+    <ControlWrapper
+      name={name}
+      label={label}
+      labelAttrs={getLabelAttrs()}
+      errorAttrs={getErrorsAttrs()}
+      formDefinition={formDefinition}
+      serverFormInfo={serverFormInfo}
+      info={info}
+    >
+      <select
+        {...getSelectAttrs({
+          defaultValue: getInputDefaultValue(name, serverFormInfo, index),
+          ...inputAttrs,
+        })}
+      >
+        {children}
+      </select>
     </ControlWrapper>
   );
 }

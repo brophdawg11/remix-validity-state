@@ -10,6 +10,8 @@ import type {
 import {
   Field,
   FormProvider,
+  Select,
+  TextArea,
   useValidatedInput,
   useValidatedTextArea,
   validateServerFormData,
@@ -25,6 +27,7 @@ interface FormSchema {
     hobby: InputDefinition;
     low: InputDefinition;
     high: InputDefinition;
+    favoriteColor: InputDefinition;
   };
   errorMessages: {
     tooShort: ErrorMessage;
@@ -92,6 +95,11 @@ let formDefinition: FormSchema = {
         min: (fd) => (fd.get("low") ? Number(fd.get("low")) : undefined),
       },
     },
+    favoriteColor: {
+      validationAttrs: {
+        required: true,
+      },
+    },
   },
   errorMessages: {
     tooShort: (attrValue, name, value) =>
@@ -125,27 +133,6 @@ function EmailAddress() {
       <label {...getLabelAttrs()}>Email Address*</label>
       <br />
       <input {...getInputAttrs()} />
-      {info.touched && info.errorMessages ? (
-        <ul {...getErrorsAttrs()}>
-          {Object.entries(info.errorMessages).map(([validation, msg]) => (
-            <li key={validation}>🆘 {msg}</li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  );
-}
-
-// This is a more complex example of skipping <Field/> in favor of manual
-// DOM construction
-function Story() {
-  let { info, getTextAreaAttrs, getLabelAttrs, getErrorsAttrs } =
-    useValidatedTextArea<typeof formDefinition>({ name: "story" });
-  return (
-    <div>
-      <label {...getLabelAttrs()}>Story*</label>
-      <br />
-      <textarea {...getTextAreaAttrs({ rows: 10, cols: 100 })} />
       {info.touched && info.errorMessages ? (
         <ul {...getErrorsAttrs()}>
           {Object.entries(info.errorMessages).map(([validation, msg]) => (
@@ -202,7 +189,7 @@ export default function Index() {
           width: 10rem;
         }
 
-        .rvs-input {
+        .rvs-input, .rvs-textarea, .rvs-select {
           display: inline-block;
           border: 1px solid lightgrey;
           padding: 0.5rem;
@@ -210,12 +197,14 @@ export default function Index() {
           width: calc(100% - 1rem);
         }
 
-        .rvs-input--invalid {
+        .rvs-input--invalid, .rvs-textarea--invalid, .rvs-select--invalid {
           border-color: red;
         }
 
-        .rvs-input.rvs-input--touched:not(.rvs-input--invalid):not(.rvs-input--validating) {
-          border-color: lightgreen;
+        .rvs-input.rvs-input--touched:not(.rvs-input--invalid):not(.rvs-input--validating),
+        .rvs-textarea.rvs-textarea--touched:not(.rvs-textarea--invalid):not(.rvs-textarea--validating),
+        .rvs-select.rvs-select--touched:not(.rvs-select--invalid):not(.rvs-select--validating) {
+            border-color: lightgreen;
         }
 
         .rvs-validating {
@@ -270,7 +259,7 @@ export default function Index() {
               <code>required="true" minLength="5" pattern="^[a-zA-Z]+$"</code>
             </p>
             <div className="demo-input">
-              <Field name="firstName" label="First Name" />
+              <Field<FormSchema> name="firstName" label="First Name" />
             </div>
           </div>
 
@@ -282,7 +271,7 @@ export default function Index() {
               </code>
             </p>
             <div className="demo-input">
-              <Field name="middleInitial" label="Middle Initial" />
+              <Field<FormSchema> name="middleInitial" label="Middle Initial" />
             </div>
           </div>
 
@@ -292,7 +281,7 @@ export default function Index() {
               <code>required="true" minLength="5" pattern="^[a-zA-Z]+$"</code>
             </p>
             <div className="demo-input">
-              <Field name="lastName" label="Last Name" />
+              <Field<FormSchema> name="lastName" label="Last Name" />
             </div>
           </div>
 
@@ -318,7 +307,7 @@ export default function Index() {
               This story textarea is required with a minlength of 10
             </p>
             <div className="demo-input">
-              <Story />
+              <TextArea name="story" label="Tell me a story:" />
             </div>
           </div>
 
@@ -327,9 +316,9 @@ export default function Index() {
               Each of these hobby inputs has <code>required="true"</code>
             </p>
             <div className="demo-input">
-              <Field name="hobby" label="Hobby #1" index={0} />
-              <Field name="hobby" label="Hobby #2" index={1} />
-              <Field name="hobby" label="Hobby #3" index={2} />
+              <Field<FormSchema> name="hobby" label="Hobby #1" index={0} />
+              <Field<FormSchema> name="hobby" label="Hobby #2" index={1} />
+              <Field<FormSchema> name="hobby" label="Hobby #3" index={2} />
             </div>
           </div>
 
@@ -339,8 +328,26 @@ export default function Index() {
               <code>max</code> attributes based on the value of the other input
             </p>
             <div className="demo-input">
-              <Field name="low" label="Low" />
-              <Field name="high" label="High" />
+              <Field<FormSchema> name="low" label="Low" />
+              <Field<FormSchema> name="high" label="High" />
+            </div>
+          </div>
+
+          <div className="demo-input-container">
+            <p className="demo-input-message">
+              This select input has <code>required="true"</code>
+            </p>
+            <div className="demo-input">
+              <Select<FormSchema> name="favoriteColor" label="Favorite Color?">
+                <option value="" />
+                <option value="red">Red</option>
+                <option value="orange">Orange</option>
+                <option value="yellow">Yellow</option>
+                <option value="green">Green</option>
+                <option value="blue">Blue</option>
+                <option value="indigo">Indigo</option>
+                <option value="violet">Violet</option>
+              </Select>
             </div>
           </div>
 
