@@ -117,7 +117,7 @@ export interface InputInfo {
 
 // Server-side only (currently) - validate all specified inputs in the formData
 export type ServerFormInfo<T extends FormDefinition> = {
-  submittedValues: Record<KeyOf<T["inputs"]>, string | string[]>;
+  submittedValues: Record<KeyOf<T["inputs"]>, string | string[] | null>;
   inputs: Record<KeyOf<T["inputs"]>, InputInfo | InputInfo[]>;
   valid: boolean;
 };
@@ -300,17 +300,18 @@ async function validateInput(
   inputName: string,
   inputDef: InputDefinition,
   value: string,
-  inputEl?: SupportedHTMLElements, // CSR
+  inputEl?: SupportedHTMLElements | SupportedHTMLElements[], // CSR
   formData?: FormData // SSR
 ): Promise<ExtendedValidityState> {
   let validity = getBaseValidityState();
 
   if (!formData) {
+    let formEl = Array.isArray(inputEl) ? inputEl[0]?.form : inputEl?.form;
     invariant(
-      inputEl?.form,
+      formEl,
       `validateInput expected an inputEl.form to be available for input "${inputName}"`
     );
-    formData = new FormData(inputEl.form);
+    formData = new FormData(formEl);
   }
 
   if (inputDef.validationAttrs) {
@@ -326,20 +327,25 @@ async function validateInput(
         continue;
       }
       let builtInValidation = builtInValidations[attr];
-      let isInvalid = inputEl?.validity
-        ? inputEl?.validity[builtInValidation.domKey]
-        : !builtInValidation.validate(value, String(attrValue));
+      let isInvalid = false;
+      let isElInvalid = (el?: SupportedHTMLElements) =>
+        el?.validity
+          ? el?.validity[builtInValidation.domKey]
+          : !builtInValidation.validate(value, String(attrValue));
+      if (Array.isArray(inputEl)) {
+        isInvalid = inputEl.every((el) => isElInvalid(el));
+      } else {
+        isInvalid = isElInvalid(inputEl);
+      }
       validity[builtInValidation?.domKey || attr] = isInvalid;
       validity.valid = validity.valid && !isInvalid;
     }
   }
 
   if (inputDef.customValidations) {
-    let currentFormData =
-      formData || (inputEl?.form ? new FormData(inputEl.form) : undefined);
     for (let name of Object.keys(inputDef.customValidations)) {
       let validate = inputDef.customValidations[name];
-      let isInvalid = !(await validate(value, currentFormData));
+      let isInvalid = !(await validate(value, formData));
       validity[name] = isInvalid;
       validity.valid = validity.valid && !isInvalid;
     }
@@ -358,8 +364,7 @@ export async function validateServerFormData<T extends FormDefinition>(
   // haven't filled in the required keys yet
   // @ts-expect-error
   const inputs: ServerFormInfo["inputs"] = {};
-  // @ts-expect-error
-  const submittedValues: ServerFormInfo["submittedValues"] = {};
+  const submittedValues = {} as ServerFormInfo<T>["submittedValues"];
 
   let valid = true;
   let entries = Object.entries(formDefinition.inputs) as Array<
@@ -368,31 +373,52 @@ export async function validateServerFormData<T extends FormDefinition>(
   await Promise.all(
     entries.map(async ([inputName, inputDef]) => {
       let values = formData.getAll(inputName);
-      for (let value of values) {
-        if (typeof value === "string") {
-          // Always assume inputs have been modified during SSR validation
-          let inputInfo = {
-            touched: true,
-            dirty: true,
-            state: "done",
-            validity: await validateInput(
+      if (formData.has(inputName)) {
+        for (let value of values) {
+          if (typeof value === "string") {
+            // Always assume inputs have been modified during SSR validation
+            let inputInfo: InputInfo = {
+              touched: true,
+              dirty: true,
+              state: "done",
+              validity: await validateInput(
+                inputName,
+                inputDef,
+                value,
+                undefined,
+                formData
+              ),
+            };
+            // Add the values to inputs/submittedValues properly depending on if
+            // we've encountered multiple values for this input name or not
+            addValueFromSingleOrMultipleInput(inputName, inputInfo, inputs);
+            addValueFromSingleOrMultipleInput(
               inputName,
-              inputDef,
               value,
-              undefined,
-              formData
-            ),
-          };
-          // Add the values to inputs/submittedValues properly depending on if
-          // we've encountered multiple values for this input name or not
-          addValueFromSingleOrMultipleInput(inputName, inputInfo, inputs);
-          addValueFromSingleOrMultipleInput(inputName, value, submittedValues);
-          valid = valid && inputInfo.validity.valid;
-        } else {
-          console.warn(
-            `Skipping non-string value in FormData for field [${inputName}]`
-          );
+              submittedValues
+            );
+            valid = valid && inputInfo.validity?.valid === true;
+          } else {
+            console.warn(
+              `Skipping non-string value in FormData for field [${inputName}]`
+            );
+          }
         }
+      } else {
+        let inputInfo: InputInfo = {
+          touched: true,
+          dirty: true,
+          state: "done",
+          validity: await validateInput(
+            inputName,
+            inputDef,
+            "",
+            undefined,
+            formData
+          ),
+        };
+        inputs[inputName] = inputInfo;
+        submittedValues[inputName] = null;
       }
     })
   );
@@ -518,6 +544,7 @@ function shouldShowErrors(
   return validity?.valid === false && state === "done" && touched;
 }
 
+// Get attributes shared across input/textarea/select elements
 function getControlAttrs<T extends SupportedControlTypes>(
   ctx: ReturnType<typeof useValidatedControl>,
   controlType: T,
@@ -538,6 +565,24 @@ function getControlAttrs<T extends SupportedControlTypes>(
         }
       : {}),
     ...ctx.validationAttrs,
+  };
+}
+
+// For checkbox/radio inputs, we need to listen across all inputs for the given
+// name to update the validate as a group
+function registerMultipleEventListeners(
+  inputEl: SupportedHTMLElements,
+  event: "blur" | "change" | "input",
+  handler: () => void
+) {
+  let selector = `input[type="${inputEl.type}"][name="${inputEl.name}"]`;
+  Array.from(inputEl.form?.querySelectorAll(selector) || []).forEach((el) =>
+    el.addEventListener(event, handler)
+  );
+  return () => {
+    Array.from(inputEl?.form?.querySelectorAll(selector) || []).forEach((el) =>
+      el.removeEventListener(event, handler)
+    );
   };
 }
 //#endregion
@@ -603,7 +648,7 @@ function useValidatedControl<
 
   let serverFormInfo = opts.serverFormInfo || ctx?.serverFormInfo;
   let wasSubmitted = false;
-  let serverValue: string | undefined = undefined;
+  let serverValue: string | null = null;
   let serverValidity: InputInfo["validity"] = undefined;
 
   if (serverFormInfo != null) {
@@ -687,10 +732,16 @@ function useValidatedControl<
     if (!inputEl) {
       return;
     }
+    let inputType = inputDef.validationAttrs?.type;
     let handler = () => setTouched(true);
+
+    if (inputType === "checkbox" || inputType === "radio") {
+      return registerMultipleEventListeners(inputEl, "blur", handler);
+    }
+
     inputEl.addEventListener("blur", handler);
     return () => inputEl?.removeEventListener("blur", handler);
-  }, [inputRef]);
+  }, [inputDef.validationAttrs?.type, inputRef, name]);
 
   // Set value and InputInfo.dirty on `input` events
   React.useEffect(() => {
@@ -698,13 +749,21 @@ function useValidatedControl<
     if (!inputEl) {
       return;
     }
+    let inputType = inputDef.validationAttrs?.type;
+    let event: "change" | "input" =
+      inputType === "radio" || inputType === "checkbox" ? "change" : "input";
     let handler = function (this: E) {
       setDirty(true);
       setValue(this.value);
     };
-    inputEl.addEventListener("input", handler);
-    return () => inputEl?.removeEventListener("input", handler);
-  }, [inputRef]);
+
+    if (inputType === "checkbox" || inputType === "radio") {
+      return registerMultipleEventListeners(inputEl, event, handler);
+    }
+
+    inputEl.addEventListener(event, handler);
+    return () => inputEl?.removeEventListener(event, handler);
+  }, [inputRef, inputDef.validationAttrs?.type, name]);
 
   // Run validations on input value changes
   React.useEffect(() => {
@@ -741,12 +800,26 @@ function useValidatedControl<
       let localController = new AbortController();
       controller.current = localController;
       setValidationState("validating");
-      const validity = await validateInput(
-        name,
-        inputDef,
-        value,
-        inputRef.current || undefined
-      );
+
+      let validity: ExtendedValidityState;
+      let inputType = inputDef.validationAttrs?.type;
+      if (inputType === "radio" || inputType === "checkbox") {
+        let selector = `input[type="${inputType}"][name="${name}"]`;
+        console.log("validating for selector", selector);
+        validity = await validateInput(
+          name,
+          inputDef,
+          value,
+          Array.from(inputRef.current?.form?.querySelectorAll(selector) || [])
+        );
+      } else {
+        validity = await validateInput(
+          name,
+          inputDef,
+          value,
+          inputRef.current || undefined
+        );
+      }
       if (localController.signal.aborted) {
         return;
       }

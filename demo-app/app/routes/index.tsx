@@ -13,7 +13,6 @@ import {
   Select,
   TextArea,
   useValidatedInput,
-  useValidatedTextArea,
   validateServerFormData,
 } from "remix-validity-state";
 
@@ -28,6 +27,8 @@ interface FormSchema {
     low: InputDefinition;
     high: InputDefinition;
     favoriteColor: InputDefinition;
+    skills: InputDefinition;
+    favoriteSkill: InputDefinition;
   };
   errorMessages: {
     tooShort: ErrorMessage;
@@ -100,6 +101,18 @@ let formDefinition: FormSchema = {
         required: true,
       },
     },
+    skills: {
+      validationAttrs: {
+        type: "checkbox",
+        required: true,
+      },
+    },
+    favoriteSkill: {
+      validationAttrs: {
+        type: "radio",
+        required: true,
+      },
+    },
   },
   errorMessages: {
     tooShort: (attrValue, name, value) =>
@@ -141,6 +154,73 @@ function EmailAddress() {
         </ul>
       ) : null}
     </div>
+  );
+}
+
+let skills = ["React", "Vue", "Preact", "Angular", "Svelte", "Solid", "Qwik"];
+
+function Skills() {
+  let [forceUpdate, setForceUpdate] = React.useState({});
+  let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } =
+    useValidatedInput<typeof formDefinition>({ name: "skills", forceUpdate });
+  // Since we'll share these attributes across all checkboxes we call these
+  // once here to avoid calling per-input.  And since we put the input inside
+  // the label we don't need the `for` attribute
+  let labelAttrs = getLabelAttrs({ htmlFor: undefined });
+  let inputAttrs = getInputAttrs();
+  return (
+    <fieldset onBlur={() => setForceUpdate({})}>
+      <legend>Pick a few skills:</legend>
+      {skills.map((s) => (
+        <label key={s} {...labelAttrs}>
+          {/* Make the id unique for this checkbox, based on value */}
+          <input
+            {...{ ...inputAttrs, id: `${inputAttrs.id}--${s.toLowerCase()}` }}
+          />
+          &nbsp;
+          {s}
+        </label>
+      ))}
+      {info.touched && info.errorMessages ? (
+        <ul {...getErrorsAttrs()}>
+          {Object.entries(info.errorMessages).map(([validation, msg]) => (
+            <li key={validation}>🆘 {msg}</li>
+          ))}
+        </ul>
+      ) : null}
+    </fieldset>
+  );
+}
+
+function FavoriteSkill() {
+  let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } =
+    useValidatedInput<typeof formDefinition>({ name: "favoriteSkill" });
+  // Since we'll share these attributes across all radios we call these
+  // once here to avoid calling per-input.  And since we put the input inside
+  // the label we don't need the `for` attribute
+  let labelAttrs = getLabelAttrs({ htmlFor: undefined });
+  let inputAttrs = getInputAttrs();
+  return (
+    <fieldset>
+      <legend>Pick a favorite skill:</legend>
+      {skills.map((s) => (
+        <label key={s} {...labelAttrs}>
+          {/* Make the id unique for this radio, based on value */}
+          <input
+            {...{ ...inputAttrs, id: `${inputAttrs.id}--${s.toLowerCase()}` }}
+          />
+          &nbsp;
+          {s}
+        </label>
+      ))}
+      {info.touched && info.errorMessages ? (
+        <ul {...getErrorsAttrs()}>
+          {Object.entries(info.errorMessages).map(([validation, msg]) => (
+            <li key={validation}>🆘 {msg}</li>
+          ))}
+        </ul>
+      ) : null}
+    </fieldset>
   );
 }
 
@@ -189,7 +269,7 @@ export default function Index() {
           width: 10rem;
         }
 
-        .rvs-input, .rvs-textarea, .rvs-select {
+        .rvs-input:not([type=checkbox]):not([type=radio]), .rvs-textarea, .rvs-select {
           display: inline-block;
           border: 1px solid lightgrey;
           padding: 0.5rem;
@@ -201,9 +281,7 @@ export default function Index() {
           border-color: red;
         }
 
-        .rvs-input.rvs-input--touched:not(.rvs-input--invalid):not(.rvs-input--validating),
-        .rvs-textarea.rvs-textarea--touched:not(.rvs-textarea--invalid):not(.rvs-textarea--validating),
-        .rvs-select.rvs-select--touched:not(.rvs-select--invalid):not(.rvs-select--validating) {
+        .rvs-input.rvs-input--touched:not(.rvs-input--invalid):not(.rvs-input--validating) {
             border-color: lightgreen;
         }
 
@@ -348,6 +426,26 @@ export default function Index() {
                 <option value="indigo">Indigo</option>
                 <option value="violet">Violet</option>
               </Select>
+            </div>
+          </div>
+
+          <div className="demo-input-container">
+            <p className="demo-input-message">
+              This set of checkboxes has <code>required="true"</code>
+              <br />
+            </p>
+            <div className="demo-input">
+              <Skills />
+            </div>
+          </div>
+
+          <div className="demo-input-container">
+            <p className="demo-input-message">
+              This set of radios has <code>required="true"</code>
+              <br />
+            </p>
+            <div className="demo-input">
+              <FavoriteSkill />
             </div>
           </div>
 
