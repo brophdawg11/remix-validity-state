@@ -176,6 +176,10 @@ export interface InputInfo {
   errorMessages?: Record<string, string>;
 }
 
+export type ServerOnlyCustomValidations<T extends FormDefinition> = Partial<{
+  [key in KeyOf<T["inputs"]>]: CustomValidations;
+}>;
+
 // Server-side only (currently) - validate all specified inputs in the formData
 export type ServerFormInfo<T extends FormDefinition> = {
   submittedValues: Record<KeyOf<T["inputs"]>, string | string[] | null>;
@@ -365,7 +369,8 @@ function IsInputDefinition(
 // Called in a useEffect client side and from validateServerFormIno server-side
 async function validateInput(
   inputName: string,
-  inputDef: ControlDefinition,
+  validationAttrs: ControlDefinition["validationAttrs"],
+  customValidations: ControlDefinition["customValidations"],
   value: string,
   inputEl?: SupportedHTMLElements | SupportedHTMLElements[], // CSR
   formData?: FormData // SSR
@@ -381,8 +386,8 @@ async function validateInput(
     formData = new FormData(formEl);
   }
 
-  if (inputDef.validationAttrs) {
-    for (let _attr of Object.keys(inputDef.validationAttrs)) {
+  if (validationAttrs) {
+    for (let _attr of Object.keys(validationAttrs)) {
       let attr = _attr as KeyOf<BuiltInValidationAttrs>;
       // Ignoring this "error" since the type narrowing to accomplish this
       // would be nasty due to the differences in attribute values per input
@@ -390,7 +395,7 @@ async function validateInput(
       // users are specifying valid attributes up front in their schemas and
       // just yolo this lookup
       // @ts-expect-error
-      let _attrValue = inputDef.validationAttrs[attr] || null;
+      let _attrValue = validationAttrs[attr] || null;
       let attrValue = calculateValidationAttr(_attrValue, formData);
       // Undefined attr values means the attribute doesn't exist and there's
       // nothing to validate
@@ -413,9 +418,9 @@ async function validateInput(
     }
   }
 
-  if (inputDef.customValidations) {
-    for (let name of Object.keys(inputDef.customValidations)) {
-      let validate = inputDef.customValidations[name];
+  if (customValidations) {
+    for (let name of Object.keys(customValidations)) {
+      let validate = customValidations[name];
       let isInvalid = !(await validate(value, formData));
       validity[name] = isInvalid;
       validity.valid = validity.valid && !isInvalid;
@@ -428,7 +433,8 @@ async function validateInput(
 // Perform all validations for a submitted form on the server
 export async function validateServerFormData<T extends FormDefinition>(
   formData: FormData,
-  formDefinition: T
+  formDefinition: T,
+  serverCustomValidations?: ServerOnlyCustomValidations<T>
 ): Promise<ServerFormInfo<T>> {
   // Unsure if there's a better way to do this type of object mapping while
   // keeping the keys strongly typed - but this currently complains since we
@@ -454,7 +460,11 @@ export async function validateServerFormData<T extends FormDefinition>(
               state: "done",
               validity: await validateInput(
                 inputName,
-                inputDef,
+                inputDef.validationAttrs,
+                {
+                  ...inputDef.customValidations,
+                  ...serverCustomValidations?.[inputName],
+                },
                 value,
                 undefined,
                 formData
@@ -482,7 +492,8 @@ export async function validateServerFormData<T extends FormDefinition>(
           state: "done",
           validity: await validateInput(
             inputName,
-            inputDef,
+            inputDef.validationAttrs,
+            inputDef.customValidations,
             "",
             undefined,
             formData
@@ -882,7 +893,8 @@ function useValidatedControl<
       if (inputType === "radio" || inputType === "checkbox") {
         validity = await validateInput(
           name,
-          inputDef,
+          inputDef.validationAttrs,
+          inputDef.customValidations,
           value,
           Array.from(
             inputRef.current?.form?.querySelectorAll(
@@ -893,7 +905,8 @@ function useValidatedControl<
       } else {
         validity = await validateInput(
           name,
-          inputDef,
+          inputDef.validationAttrs,
+          inputDef.customValidations,
           value,
           inputRef.current || undefined
         );
