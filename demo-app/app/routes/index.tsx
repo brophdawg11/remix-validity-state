@@ -70,7 +70,7 @@ let formDefinition: FormSchema = {
         },
       },
       errorMessages: {
-        uniqueEmail(attrValue, name, value) {
+        uniqueEmail(_, __, value) {
           return `The email address "${value}" is already in use!`;
         },
       },
@@ -128,10 +128,6 @@ export const action = async ({ request }: ActionArgs) => {
   const formData = await request.formData();
 
   // Validate server-side using the same validations specified in the <input>
-  // TODO: Can we expose form-level `valid` field somewhere in client?
-  // We currently only get it back from the server on serverFormInfo.valid.  At
-  // the moment, client side the <form> doesn't really know about any of it's
-  // descendant inputs.  Maybe we can do a pub/sub through context?
   const serverFormInfo = await validateServerFormData(formData, formDefinition);
 
   if (!serverFormInfo.valid) {
@@ -241,95 +237,9 @@ export default function Index() {
 
   return (
     <div>
-      <style>{`
-        body {
-          font-size: 16px;
-          box-sizing: border-box;
-        }
+      <Styles />
+      <Intro />
 
-        code {
-          background-color: rgba(220, 220, 220, 0.5);
-          padding: 0.2rem;
-          font-weight: bold;
-          font-size: 0.8rem;
-        }
-
-        .italic {
-          font-style: italic;
-        }
-
-        .demo-input-container {
-          margin-bottom: 2rem;
-          max-width: 800px;
-        }
-
-        .demo-input {
-          max-width: 400px;
-          padding-left: 2rem;
-        }
-
-        .rvs-label {
-          display: block;
-          padding-right: 1em;
-          width: 10rem;
-        }
-
-        .rvs-input:not([type=checkbox]):not([type=radio]), .rvs-textarea, .rvs-select {
-          display: inline-block;
-          border: 1px solid lightgrey;
-          padding: 0.5rem;
-          border-radius: 3px;
-          width: calc(100% - 1rem);
-        }
-
-        .rvs-input--invalid, .rvs-textarea--invalid, .rvs-select--invalid {
-          border-color: red;
-        }
-
-        .rvs-input.rvs-input--touched:not(.rvs-input--invalid):not(.rvs-input--validating),
-        .rvs-textarea.rvs-textarea--touched:not(.rvs-textarea--invalid):not(.rvs-textarea--validating),
-        .rvs-select.rvs-select--touched:not(.rvs-select--invalid):not(.rvs-select--validating) {
-            border-color: lightgreen;
-        }
-
-        .rvs-validating {
-          font-style: italic;
-          text-align: right;
-          margin: 0;
-          padding: 0;
-        }
-
-        .rvs-errors {
-          color: red;
-          list-style: none;
-          margin: 0;
-          padding: 0;
-        }
-      `}</style>
-
-      <h1>Remix Validity State Demo Form</h1>
-
-      <p>
-        This is a sample form using{" "}
-        <a
-          href="https://github.com/brophdawg11/remix-validity-state"
-          target="_blank"
-          rel="noreferrer"
-        >
-          remix-validity-state
-        </a>{" "}
-        to demonstrate form validation capabilities. You can see the source code
-        of this form{" "}
-        <a
-          href="https://github.com/brophdawg11/remix-validity-state/blob/main/demo-app/app/routes/index.tsx"
-          target="_blank"
-          rel="noreferrer"
-        >
-          in github
-        </a>
-        .
-      </p>
-      <hr />
       <FormProvider
         formDefinition={formDefinition}
         serverFormInfo={
@@ -461,5 +371,105 @@ export default function Index() {
         </Form>
       </FormProvider>
     </div>
+  );
+}
+
+function Intro() {
+  return (
+    <>
+      {" "}
+      <h1>Remix Validity State Demo Form</h1>
+      <p>
+        This is a sample form using{" "}
+        <a
+          href="https://github.com/brophdawg11/remix-validity-state"
+          target="_blank"
+          rel="noreferrer"
+        >
+          remix-validity-state
+        </a>{" "}
+        to demonstrate form validation capabilities. You can see the source code
+        of this form{" "}
+        <a
+          href="https://github.com/brophdawg11/remix-validity-state/blob/main/demo-app/app/routes/index.tsx"
+          target="_blank"
+          rel="noreferrer"
+        >
+          in github
+        </a>
+        .
+      </p>
+      <hr />
+    </>
+  );
+}
+
+function Styles() {
+  return (
+    <style>{`
+body {
+  font-size: 16px;
+  box-sizing: border-box;
+}
+
+code {
+  background-color: rgba(220, 220, 220, 0.5);
+  padding: 0.2rem;
+  font-weight: bold;
+  font-size: 0.8rem;
+}
+
+.italic {
+  font-style: italic;
+}
+
+.demo-input-container {
+  margin-bottom: 2rem;
+  max-width: 800px;
+}
+
+.demo-input {
+  max-width: 400px;
+  padding-left: 2rem;
+}
+
+.rvs-label {
+  display: block;
+  padding-right: 1em;
+  width: 10rem;
+}
+
+.rvs-input:not([type=checkbox]):not([type=radio]), .rvs-textarea, .rvs-select {
+  display: inline-block;
+  border: 1px solid lightgrey;
+  padding: 0.5rem;
+  border-radius: 3px;
+  width: calc(100% - 1rem);
+}
+
+.rvs-input--invalid, .rvs-textarea--invalid, .rvs-select--invalid {
+  border-color: red;
+}
+
+.rvs-input.rvs-input--touched:not(.rvs-input--invalid):not(.rvs-input--validating),
+.rvs-textarea.rvs-textarea--touched:not(.rvs-textarea--invalid):not(.rvs-textarea--validating),
+.rvs-select.rvs-select--touched:not(.rvs-select--invalid):not(.rvs-select--validating) {
+    border-color: lightgreen;
+}
+
+.rvs-validating {
+  font-style: italic;
+  text-align: right;
+  margin: 0;
+  padding: 0;
+}
+
+.rvs-errors {
+  color: red;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+`}</style>
   );
 }

@@ -148,7 +148,7 @@ export interface FormDefinition {
   inputs: {
     [key: string]: ControlDefinition;
   };
-  errorMessages: {
+  errorMessages?: {
     [key: string]: ErrorMessage;
   };
 }
@@ -667,6 +667,45 @@ function registerMultipleEventListeners(
     );
   };
 }
+
+// Determine the current error messages to display based on the ExtendedValidityState
+// On the initial client render, when we don't have a ref, we accept
+// currentValidationAttrs.  On subsequent renders we use the ref and read the
+// up-to-date attribute value
+function getCurrentErrorMessages<T extends FormDefinition>(
+  formDefinition: T,
+  inputName: KeyOf<T["inputs"]>,
+  inputValue: string,
+  validity?: ExtendedValidityState,
+  currentValidationAttrs?: Record<string, string | number | boolean>,
+  inputEl?: SupportedHTMLElements
+) {
+  let messages = Object.entries(validity || {})
+    .filter((e) => e[0] !== "valid" && e[1])
+    .reduce((acc, [validation, valid]) => {
+      let attr = builtInValidityToAttrMapping[
+        validation as ValidityStateKey
+      ] as KeyOf<BuiltInValidationAttrs>;
+      let message =
+        formDefinition?.inputs?.[inputName]?.errorMessages?.[validation] ||
+        formDefinition?.errorMessages?.[validation] ||
+        builtInValidations[attr]?.errorMessage;
+      if (typeof message === "function") {
+        let attrValue = inputEl
+          ? inputEl.getAttribute(attr)
+          : currentValidationAttrs?.[attr];
+        message = message(
+          attrValue != null ? String(attrValue) : undefined,
+          inputName,
+          inputValue
+        );
+      }
+      return Object.assign(acc, {
+        [validation]: message,
+      });
+    }, {});
+  return Object.keys(messages).length > 0 ? messages : undefined;
+}
 //#endregion
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -724,10 +763,6 @@ function useValidatedControl<
     `useValidatedInput() could not find a corresponding definition for the "${name}" input`
   );
 
-  let errorMessages = (key: ValidityStateKey, inputName: KeyOf<T["inputs"]>) =>
-    formDefinition?.inputs?.[inputName]?.errorMessages?.[key] ||
-    formDefinition?.errorMessages?.[key];
-
   let serverFormInfo = opts.serverFormInfo || ctx?.serverFormInfo;
   let wasSubmitted = false;
   let serverValue: string | null = null;
@@ -755,11 +790,25 @@ function useValidatedControl<
   }
 
   // Setup React state
+
+  // Need a ref to grab formData for attribute generation
+  let inputRef = React.useRef<E>(null);
+
+  let formData = inputRef.current?.form
+    ? new FormData(inputRef.current.form)
+    : serverFormInfo
+    ? generateFormDataFromServerFormInfo(serverFormInfo.submittedValues)
+    : new FormData();
+
+  let currentValidationAttrs = calculateValidationAttrs(
+    inputDef.validationAttrs,
+    formData
+  );
+
   let id = React.useId();
   let prevServerFormInfo = React.useRef<ServerFormInfo<T> | undefined>(
     serverFormInfo
   );
-  let inputRef = React.useRef<E>(null);
   let composedRef = useComposedRefs(inputRef, opts.ref);
   let [value, setValue] = React.useState(serverValue || "");
   let [dirty, setDirty] = React.useState<boolean>(wasSubmitted);
@@ -770,47 +819,19 @@ function useValidatedControl<
   let [validity, setValidity] = React.useState<
     InputInfo["validity"] | undefined
   >(serverValidity);
-  let controller = React.useRef<AbortController | null>(null);
-
-  let formData = inputRef.current?.form
-    ? new FormData(inputRef.current.form)
-    : serverFormInfo
-    ? generateFormDataFromServerFormInfo(serverFormInfo.submittedValues)
-    : new FormData();
-
-  let elementType = inputDef.element;
-  let inputType = IsInputDefinition(inputDef)
-    ? inputDef.validationAttrs?.type
-    : null;
-  let validationAttrs = calculateValidationAttrs(
-    inputDef.validationAttrs,
-    formData
+  let [currentErrorMessages, setCurrentErrorMessages] = React.useState<
+    Record<string, string> | undefined
+  >(() =>
+    getCurrentErrorMessages(
+      formDefinition!,
+      name,
+      value,
+      validity,
+      currentValidationAttrs,
+      undefined
+    )
   );
-
-  let currentErrorMessages: Record<string, string> | undefined;
-  if (validity?.valid === false) {
-    currentErrorMessages = Object.entries(validity)
-      .filter((e) => e[0] !== "valid" && e[1])
-      .reduce((acc, [validation, valid]) => {
-        let attr = builtInValidityToAttrMapping[
-          validation as ValidityStateKey
-        ] as KeyOf<BuiltInValidationAttrs>;
-        let message =
-          errorMessages(validation as ValidityStateKey, name) ||
-          builtInValidations[attr]?.errorMessage;
-        if (typeof message === "function") {
-          let attrValue = validationAttrs[attr];
-          message = message(
-            attrValue ? String(attrValue) : undefined,
-            name,
-            value
-          );
-        }
-        return Object.assign(acc, {
-          [validation]: message,
-        });
-      }, {});
-  }
+  let controller = React.useRef<AbortController | null>(null);
 
   // Set InputInfo.touched on `blur` events
   React.useEffect(() => {
@@ -818,6 +839,11 @@ function useValidatedControl<
     if (!inputEl) {
       return;
     }
+
+    let inputType = IsInputDefinition(inputDef)
+      ? inputDef.validationAttrs?.type
+      : null;
+
     let handler = () => setTouched(true);
 
     if (inputType === "checkbox" || inputType === "radio") {
@@ -826,7 +852,7 @@ function useValidatedControl<
 
     inputEl.addEventListener("blur", handler);
     return () => inputEl?.removeEventListener("blur", handler);
-  }, [inputRef, name, inputType]);
+  }, [inputDef, inputRef, name]);
 
   // Set value and InputInfo.dirty on `input` events
   React.useEffect(() => {
@@ -834,12 +860,19 @@ function useValidatedControl<
     if (!inputEl) {
       return;
     }
+
+    let elementType = !IsInputDefinition(inputDef) ? inputDef.element : null;
+    let inputType = IsInputDefinition(inputDef)
+      ? inputDef.validationAttrs?.type
+      : null;
+
     let event: "change" | "input" =
       elementType === "select" ||
       inputType === "radio" ||
       inputType === "checkbox"
         ? "change"
         : "input";
+
     let handler = function (this: E) {
       setDirty(true);
       setValue(this.value);
@@ -851,26 +884,22 @@ function useValidatedControl<
 
     inputEl.addEventListener(event, handler);
     return () => inputEl?.removeEventListener(event, handler);
-  }, [elementType, inputRef, inputType, name]);
+  }, [inputDef]);
 
   // Run validations on input value changes
   React.useEffect(() => {
     async function go() {
-      // If we heard back from the server, consider us validated and mark
-      // dirty/touched to show errors
-      if (serverFormInfo) {
+      // If this is the first render after a server validation, consider us
+      // validated and mark dirty/touched to show errors.  Then skip re-running
+      // validations on the client
+      if (prevServerFormInfo.current !== serverFormInfo) {
+        prevServerFormInfo.current = serverFormInfo;
         setDirty(true);
         setTouched(true);
         setValidationState("done");
         if (serverValidity) {
           setValidity(serverValidity);
         }
-      }
-
-      // If this is the first render after a server validation, don't re-run
-      // validations on the client
-      if (prevServerFormInfo.current !== serverFormInfo) {
-        prevServerFormInfo.current = serverFormInfo;
         return;
       }
 
@@ -881,7 +910,6 @@ function useValidatedControl<
 
       // Validate the input
       if (!inputDef) {
-        console.warn(`No validations found for the "${name}" input`);
         setValidationState("done");
         return;
       }
@@ -890,6 +918,9 @@ function useValidatedControl<
       setValidationState("validating");
 
       let validity: ExtendedValidityState;
+      let inputType = IsInputDefinition(inputDef)
+        ? inputDef.validationAttrs?.type
+        : null;
       if (inputType === "radio" || inputType === "checkbox") {
         validity = await validateInput(
           name,
@@ -916,6 +947,26 @@ function useValidatedControl<
       }
       setValidationState("done");
       setValidity(validity);
+
+      // Generate error messages based on the validations
+      if (validity?.valid === false) {
+        invariant(formDefinition, "No formDefinition available in useEffect");
+        invariant(
+          inputRef.current,
+          "Expected an input to be present for client-side error message generation"
+        );
+        let messages = getCurrentErrorMessages(
+          formDefinition,
+          name,
+          value,
+          validity,
+          undefined,
+          inputRef.current
+        );
+        setCurrentErrorMessages(messages);
+      } else {
+        setCurrentErrorMessages(undefined);
+      }
     }
 
     go().catch((e) => console.error("Error in validateInput useEffect", e));
@@ -926,12 +977,12 @@ function useValidatedControl<
     // auto-revalidation on dynamic attribute value changes
   }, [
     forceUpdate,
-    name,
-    inputType,
+    formDefinition,
     inputDef,
-    value,
+    name,
     serverFormInfo,
     serverValidity,
+    value,
   ]);
 
   let info: InputInfo = {
@@ -971,7 +1022,7 @@ function useValidatedControl<
   return {
     name,
     id,
-    validationAttrs,
+    validationAttrs: currentValidationAttrs,
     composedRef,
     info,
     serverFormInfo,
