@@ -423,6 +423,90 @@ function FavoriteSkill() {
 }
 ```
 
+#### Server-only Validations
+
+While this library tries to lean-into shared validations between client and server, there are also good reasons not to share validations entirely. Most of the time, this comes down to keeping client-bundles small and/or needing direct server or DB access for certain validations.
+
+One approach is to just perform server-only validations manually _after_ calling `validateServerFormInfo`:
+
+```js
+import { validateServerFormData } from "remix-validity-state";
+
+export async function action({ request }: ActionArgs) {
+  const formData = await request.formData();
+  const serverFormInfo = await validateServerFormData(
+    formData,
+    formDefinitions
+  );
+  if (!serverFormInfo.valid) {
+    return json({ serverFormInfo });
+  }
+
+  // Now that we know our shared validations passed, we can perform more complex validations
+  let isEmailUnique = await checkEmail(
+    serverFormInfo.submittedValues.emailAddress
+  );
+  if (!isEmailUnique) {
+    return json({
+      serverFormInfo,
+      errors: { email: "Email address is not unique " },
+    });
+  }
+  // ...
+}
+```
+
+This may be sufficient in some cases, but also now requires you to support a new error messaging UI separate from the one already handled via `<Input>` and/or provided by `useValidatedInput().info.errorMessages`.
+
+To support this common use-case, you can pass a set of `customValidations` server-only implementations to `validateServerFormData`, which will be used instead of the validations you define in the shared `formDefinition`. Usually, you'll just put a stub `() => true` in your shared validations so the client is aware of the validation.
+
+```ts
+import type { ServerOnlyCustomValidations } from 'remix-validity-state'
+import { validateServerFormData } from 'remix-validity-state'
+
+let formDefinition: FormSchema = {
+  inputs: {
+    emailAddress: {
+      validationAttrs: {
+        type: "email",
+        required: true,
+      },
+      customValidations: {
+        // always "valid" in shared validations
+        uniqueEmail: () => true,
+      },
+      errorMessages: {
+        uniqueEmail: () => 'Email address already in use!'',
+      },
+    },
+  }
+};
+
+const serverCustomValidations: ServerOnlyCustomValidations<FormSchema> = {
+  emailAddress: {
+    async uniqueEmail(value) {
+      let isUnique = await checkEmail(value);
+      return isUnique;
+    },
+  },
+};
+
+export async function action({ request }: ActionArgs) {
+  const formData = await request.formData();
+  const serverFormInfo = await validateServerFormData(
+    formData,
+    formDefinitions,
+    serverCustomValidations
+  );
+  // serverFormInfo.valid here will be reflective of the custom server-only
+  // validation and will leverage your shared `errorMessages`
+  if (!serverFormInfo.valid) {
+    return json({ serverFormInfo });
+  }
+  // ...
+}
+```
+
 #### Error Messages
 
 Basic error messaging is handled out of the box by `<Input>` for built-in HTML validations. If you are using custom validations, or if you want to override the built-in messaging, you can provide custom error messages in our `formDefinition`. Custom error messages can either be a static string, or a function that receives the attribute value (built-in validations only), the input name, and the input value:
