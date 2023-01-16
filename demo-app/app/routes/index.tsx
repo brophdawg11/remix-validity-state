@@ -1,15 +1,19 @@
-import { Form, useActionData } from "@remix-run/react";
 import type { ActionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
+import { Form, useActionData } from "@remix-run/react";
 import * as React from "react";
 import type {
   ErrorMessage,
   InputDefinition,
+  SelectDefinition,
   ServerFormInfo,
+  TextAreaDefinition,
 } from "remix-validity-state";
 import {
-  Field,
+  Input,
   FormProvider,
+  Select,
+  TextArea,
   useValidatedInput,
   validateServerFormData,
 } from "remix-validity-state";
@@ -23,6 +27,10 @@ interface FormSchema {
     hobby: InputDefinition;
     low: InputDefinition;
     high: InputDefinition;
+    story: TextAreaDefinition;
+    favoriteColor: SelectDefinition;
+    skills: InputDefinition;
+    favoriteSkill: InputDefinition;
   };
   errorMessages: {
     tooShort: ErrorMessage;
@@ -84,6 +92,31 @@ let formDefinition: FormSchema = {
         min: (fd) => (fd.get("low") ? Number(fd.get("low")) : undefined),
       },
     },
+    story: {
+      element: "textarea",
+      validationAttrs: {
+        required: true,
+        minLength: 10,
+      },
+    },
+    favoriteColor: {
+      element: "select",
+      validationAttrs: {
+        required: true,
+      },
+    },
+    skills: {
+      validationAttrs: {
+        type: "checkbox",
+        required: true,
+      },
+    },
+    favoriteSkill: {
+      validationAttrs: {
+        type: "radio",
+        required: true,
+      },
+    },
   },
   errorMessages: {
     tooShort: (attrValue, name, value) =>
@@ -104,6 +137,7 @@ export const action = async ({ request }: ActionArgs) => {
   if (!serverFormInfo.valid) {
     return json({ serverFormInfo });
   }
+
   return redirect("/");
 };
 
@@ -125,6 +159,73 @@ function EmailAddress() {
         </ul>
       ) : null}
     </div>
+  );
+}
+
+let skills = ["React", "Vue", "Preact", "Angular", "Svelte", "Solid", "Qwik"];
+
+function Skills() {
+  let [forceUpdate, setForceUpdate] = React.useState({});
+  let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } =
+    useValidatedInput<typeof formDefinition>({ name: "skills", forceUpdate });
+  // Since we'll share these attributes across all checkboxes we call these
+  // once here to avoid calling per-input.  And since we put the input inside
+  // the label we don't need the `for` attribute
+  let labelAttrs = getLabelAttrs({ htmlFor: undefined });
+  let inputAttrs = getInputAttrs();
+  return (
+    <fieldset onBlur={() => setForceUpdate({})}>
+      <legend>Pick a few skills:</legend>
+      {skills.map((s) => (
+        <label key={s} {...labelAttrs}>
+          {/* Make the id unique for this checkbox, based on value */}
+          <input
+            {...{ ...inputAttrs, id: `${inputAttrs.id}--${s.toLowerCase()}` }}
+          />
+          &nbsp;
+          {s}
+        </label>
+      ))}
+      {info.touched && info.errorMessages ? (
+        <ul {...getErrorsAttrs()}>
+          {Object.entries(info.errorMessages).map(([validation, msg]) => (
+            <li key={validation}>🆘 {msg}</li>
+          ))}
+        </ul>
+      ) : null}
+    </fieldset>
+  );
+}
+
+function FavoriteSkill() {
+  let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } =
+    useValidatedInput<typeof formDefinition>({ name: "favoriteSkill" });
+  // Since we'll share these attributes across all radios we call these
+  // once here to avoid calling per-input.  And since we put the input inside
+  // the label we don't need the `for` attribute
+  let labelAttrs = getLabelAttrs({ htmlFor: undefined });
+  let inputAttrs = getInputAttrs();
+  return (
+    <fieldset>
+      <legend>Pick a favorite skill:</legend>
+      {skills.map((s) => (
+        <label key={s} {...labelAttrs}>
+          {/* Make the id unique for this radio, based on value */}
+          <input
+            {...{ ...inputAttrs, id: `${inputAttrs.id}--${s.toLowerCase()}` }}
+          />
+          &nbsp;
+          {s}
+        </label>
+      ))}
+      {info.touched && info.errorMessages ? (
+        <ul {...getErrorsAttrs()}>
+          {Object.entries(info.errorMessages).map(([validation, msg]) => (
+            <li key={validation}>🆘 {msg}</li>
+          ))}
+        </ul>
+      ) : null}
+    </fieldset>
   );
 }
 
@@ -173,7 +274,7 @@ export default function Index() {
           width: 10rem;
         }
 
-        .rvs-input {
+        .rvs-input:not([type=checkbox]):not([type=radio]), .rvs-textarea, .rvs-select {
           display: inline-block;
           border: 1px solid lightgrey;
           padding: 0.5rem;
@@ -181,12 +282,14 @@ export default function Index() {
           width: calc(100% - 1rem);
         }
 
-        .rvs-input--invalid {
+        .rvs-input--invalid, .rvs-textarea--invalid, .rvs-select--invalid {
           border-color: red;
         }
 
-        .rvs-input.rvs-input--touched:not(.rvs-input--invalid):not(.rvs-input--validating) {
-          border-color: lightgreen;
+        .rvs-input.rvs-input--touched:not(.rvs-input--invalid):not(.rvs-input--validating),
+        .rvs-textarea.rvs-textarea--touched:not(.rvs-textarea--invalid):not(.rvs-textarea--validating),
+        .rvs-select.rvs-select--touched:not(.rvs-select--invalid):not(.rvs-select--validating) {
+            border-color: lightgreen;
         }
 
         .rvs-validating {
@@ -241,7 +344,7 @@ export default function Index() {
               <code>required="true" minLength="5" pattern="^[a-zA-Z]+$"</code>
             </p>
             <div className="demo-input">
-              <Field name="firstName" label="First Name" />
+              <Input<FormSchema> name="firstName" label="First Name" />
             </div>
           </div>
 
@@ -253,7 +356,7 @@ export default function Index() {
               </code>
             </p>
             <div className="demo-input">
-              <Field name="middleInitial" label="Middle Initial" />
+              <Input<FormSchema> name="middleInitial" label="Middle Initial" />
             </div>
           </div>
 
@@ -263,7 +366,7 @@ export default function Index() {
               <code>required="true" minLength="5" pattern="^[a-zA-Z]+$"</code>
             </p>
             <div className="demo-input">
-              <Field name="lastName" label="Last Name" />
+              <Input<FormSchema> name="lastName" label="Last Name" />
             </div>
           </div>
 
@@ -289,9 +392,9 @@ export default function Index() {
               Each of these hobby inputs has <code>required="true"</code>
             </p>
             <div className="demo-input">
-              <Field name="hobby" label="Hobby #1" index={0} />
-              <Field name="hobby" label="Hobby #2" index={1} />
-              <Field name="hobby" label="Hobby #3" index={2} />
+              <Input<FormSchema> name="hobby" label="Hobby #1" index={0} />
+              <Input<FormSchema> name="hobby" label="Hobby #2" index={1} />
+              <Input<FormSchema> name="hobby" label="Hobby #3" index={2} />
             </div>
           </div>
 
@@ -301,8 +404,56 @@ export default function Index() {
               <code>max</code> attributes based on the value of the other input
             </p>
             <div className="demo-input">
-              <Field name="low" label="Low" />
-              <Field name="high" label="High" />
+              <Input<FormSchema> name="low" label="Low" />
+              <Input<FormSchema> name="high" label="High" />
+            </div>
+          </div>
+
+          <div className="demo-input-container">
+            <p className="demo-input-message">
+              This story <code>textarea</code> has <code>required="true"</code>{" "}
+              and <code>minlength="10"</code>
+            </p>
+            <div className="demo-input">
+              <TextArea name="story" label="Tell me a story:" />
+            </div>
+          </div>
+
+          <div className="demo-input-container">
+            <p className="demo-input-message">
+              This select input has <code>required="true"</code>
+            </p>
+            <div className="demo-input">
+              <Select<FormSchema> name="favoriteColor" label="Favorite Color?">
+                <option value="" />
+                <option value="red">Red</option>
+                <option value="orange">Orange</option>
+                <option value="yellow">Yellow</option>
+                <option value="green">Green</option>
+                <option value="blue">Blue</option>
+                <option value="indigo">Indigo</option>
+                <option value="violet">Violet</option>
+              </Select>
+            </div>
+          </div>
+
+          <div className="demo-input-container">
+            <p className="demo-input-message">
+              This set of checkboxes has <code>required="true"</code>
+              <br />
+            </p>
+            <div className="demo-input">
+              <Skills />
+            </div>
+          </div>
+
+          <div className="demo-input-container">
+            <p className="demo-input-message">
+              This set of radios has <code>required="true"</code>
+              <br />
+            </p>
+            <div className="demo-input">
+              <FavoriteSkill />
             </div>
           </div>
 

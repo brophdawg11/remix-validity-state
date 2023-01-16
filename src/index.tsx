@@ -16,6 +16,12 @@ type KeyOf<T> = Extract<keyof T, string>;
 // Extract the value type for an object
 type ValueOf<T> = T[keyof T];
 
+type SupportedControlTypes = "input" | "textarea" | "select";
+type SupportedHTMLElements =
+  | HTMLInputElement
+  | HTMLTextAreaElement
+  | HTMLSelectElement;
+
 /**
  * Validation attributes built-in to the browser
  */
@@ -29,6 +35,51 @@ interface BuiltInValidationAttrs {
   max?: number | BuiltInValidationAttrsFunction<number>;
   pattern?: string | BuiltInValidationAttrsFunction<string>;
 }
+
+// Valid attributes by input type.  See:
+// https://html.spec.whatwg.org/multipage/input.html#do-not-apply
+
+type InputTextValidationAttrs = {
+  type?: "text" | "search" | "url" | "tel" | "email" | "password";
+} & Pick<
+  BuiltInValidationAttrs,
+  "required" | "minLength" | "maxLength" | "pattern"
+>;
+
+type InputDateValidationAttrs = {
+  type: "date" | "month" | "week" | "time" | "datetime-local";
+} & Pick<BuiltInValidationAttrs, "required" | "min" | "max">;
+
+type InputNumberValidationAttrs = {
+  type: "number";
+} & Pick<BuiltInValidationAttrs, "required" | "min" | "max">;
+
+type InputRangeValidationAttrs = {
+  type: "range";
+} & Pick<BuiltInValidationAttrs, "min" | "max">;
+
+type InputCheckboxValidationAttrs = {
+  type: "checkbox";
+} & Pick<BuiltInValidationAttrs, "required">;
+
+type InputRadioValidationAttrs = {
+  type: "radio";
+} & Pick<BuiltInValidationAttrs, "required">;
+
+type TextAreaValidationAttrs = Pick<
+  BuiltInValidationAttrs,
+  "required" | "minLength" | "maxLength"
+>;
+
+type SelectValidationAttrs = Pick<BuiltInValidationAttrs, "required">;
+
+type InputValidationAttrs =
+  | InputTextValidationAttrs
+  | InputDateValidationAttrs
+  | InputNumberValidationAttrs
+  | InputRangeValidationAttrs
+  | InputCheckboxValidationAttrs
+  | InputRadioValidationAttrs;
 
 type ValidityStateKey = KeyOf<
   Pick<
@@ -63,20 +114,39 @@ export type ErrorMessage =
 /**
  * Definition for a single input in a form (validations + error messages)
  */
-export interface InputDefinition {
-  validationAttrs?: BuiltInValidationAttrs;
+interface BaseControlDefinition {
   customValidations?: CustomValidations;
   errorMessages?: {
     [key: string]: ErrorMessage;
   };
 }
 
+export interface InputDefinition extends BaseControlDefinition {
+  element?: "input";
+  validationAttrs?: InputValidationAttrs;
+}
+
+export interface TextAreaDefinition extends BaseControlDefinition {
+  element: "textarea";
+  validationAttrs?: TextAreaValidationAttrs;
+}
+
+export interface SelectDefinition extends BaseControlDefinition {
+  element: "select";
+  validationAttrs?: SelectValidationAttrs;
+}
+
+type ControlDefinition =
+  | InputDefinition
+  | TextAreaDefinition
+  | SelectDefinition;
+
 /**
  * Form information (inputs, validations, error messages)
  */
 export interface FormDefinition {
   inputs: {
-    [key: string]: InputDefinition;
+    [key: string]: ControlDefinition;
   };
   errorMessages: {
     [key: string]: ErrorMessage;
@@ -94,20 +164,21 @@ type MutableValidityState = Mutable<ValidityState>;
 export type ExtendedValidityState = MutableValidityState &
   Record<string, boolean>;
 
+export type AsyncValidationState = "idle" | "validating" | "done";
 /**
  * Client-side state of the input
  */
 export interface InputInfo {
   touched: boolean;
   dirty: boolean;
-  state: "idle" | "validating" | "done";
+  state: AsyncValidationState;
   validity?: ExtendedValidityState;
   errorMessages?: Record<string, string>;
 }
 
 // Server-side only (currently) - validate all specified inputs in the formData
 export type ServerFormInfo<T extends FormDefinition> = {
-  submittedValues: Record<KeyOf<T["inputs"]>, string | string[]>;
+  submittedValues: Record<KeyOf<T["inputs"]>, string | string[] | null>;
   inputs: Record<KeyOf<T["inputs"]>, InputInfo | InputInfo[]>;
   valid: boolean;
 };
@@ -284,52 +355,68 @@ function getBaseValidityState(): ExtendedValidityState {
   };
 }
 
+function IsInputDefinition(
+  inputDef: ControlDefinition
+): inputDef is InputDefinition {
+  return inputDef.element === "input" || inputDef.element == null;
+}
+
 // Perform all specified html validations for a single input
 // Called in a useEffect client side and from validateServerFormIno server-side
 async function validateInput(
   inputName: string,
-  inputDef: InputDefinition,
+  inputDef: ControlDefinition,
   value: string,
-  inputEl?: HTMLInputElement, // CSR
+  inputEl?: SupportedHTMLElements | SupportedHTMLElements[], // CSR
   formData?: FormData // SSR
 ): Promise<ExtendedValidityState> {
   let validity = getBaseValidityState();
 
   if (!formData) {
+    let formEl = Array.isArray(inputEl) ? inputEl[0]?.form : inputEl?.form;
     invariant(
-      inputEl?.form,
+      formEl,
       `validateInput expected an inputEl.form to be available for input "${inputName}"`
     );
-    formData = new FormData(inputEl.form);
+    formData = new FormData(formEl);
   }
 
   if (inputDef.validationAttrs) {
     for (let _attr of Object.keys(inputDef.validationAttrs)) {
       let attr = _attr as KeyOf<BuiltInValidationAttrs>;
-      let attrValue = calculateValidationAttr(
-        inputDef.validationAttrs[attr],
-        formData
-      );
+      // Ignoring this "error" since the type narrowing to accomplish this
+      // would be nasty due to the differences in attribute values per input
+      // type.  We're going to rely on the *ValidationAttrs types to ensure
+      // users are specifying valid attributes up front in their schemas and
+      // just yolo this lookup
+      // @ts-expect-error
+      let _attrValue = inputDef.validationAttrs[attr] || null;
+      let attrValue = calculateValidationAttr(_attrValue, formData);
       // Undefined attr values means the attribute doesn't exist and there's
       // nothing to validate
       if (attrValue == null) {
         continue;
       }
       let builtInValidation = builtInValidations[attr];
-      let isInvalid = inputEl?.validity
-        ? inputEl?.validity[builtInValidation.domKey]
-        : !builtInValidation.validate(value, String(attrValue));
+      let isInvalid = false;
+      let isElInvalid = (el?: SupportedHTMLElements) =>
+        el?.validity
+          ? el?.validity[builtInValidation.domKey]
+          : !builtInValidation.validate(value, String(attrValue));
+      if (Array.isArray(inputEl)) {
+        isInvalid = inputEl.every((el) => isElInvalid(el));
+      } else {
+        isInvalid = isElInvalid(inputEl);
+      }
       validity[builtInValidation?.domKey || attr] = isInvalid;
       validity.valid = validity.valid && !isInvalid;
     }
   }
 
   if (inputDef.customValidations) {
-    let currentFormData =
-      formData || (inputEl?.form ? new FormData(inputEl.form) : undefined);
     for (let name of Object.keys(inputDef.customValidations)) {
       let validate = inputDef.customValidations[name];
-      let isInvalid = !(await validate(value, currentFormData));
+      let isInvalid = !(await validate(value, formData));
       validity[name] = isInvalid;
       validity.valid = validity.valid && !isInvalid;
     }
@@ -348,41 +435,61 @@ export async function validateServerFormData<T extends FormDefinition>(
   // haven't filled in the required keys yet
   // @ts-expect-error
   const inputs: ServerFormInfo["inputs"] = {};
-  // @ts-expect-error
-  const submittedValues: ServerFormInfo["submittedValues"] = {};
+  const submittedValues = {} as ServerFormInfo<T>["submittedValues"];
 
   let valid = true;
   let entries = Object.entries(formDefinition.inputs) as Array<
-    [KeyOf<T["inputs"]>, InputDefinition]
+    [KeyOf<T["inputs"]>, ControlDefinition]
   >;
   await Promise.all(
     entries.map(async ([inputName, inputDef]) => {
       let values = formData.getAll(inputName);
-      for (let value of values) {
-        if (typeof value === "string") {
-          // Always assume inputs have been modified during SSR validation
-          let inputInfo = {
-            touched: true,
-            dirty: true,
-            state: "done",
-            validity: await validateInput(
+      if (formData.has(inputName)) {
+        for (let value of values) {
+          if (typeof value === "string") {
+            // Always assume inputs have been modified during SSR validation
+            let inputInfo: InputInfo = {
+              touched: true,
+              dirty: true,
+              state: "done",
+              validity: await validateInput(
+                inputName,
+                inputDef,
+                value,
+                undefined,
+                formData
+              ),
+            };
+            // Add the values to inputs/submittedValues properly depending on if
+            // we've encountered multiple values for this input name or not
+            addValueFromSingleOrMultipleInput(inputName, inputInfo, inputs);
+            addValueFromSingleOrMultipleInput(
               inputName,
-              inputDef,
               value,
-              undefined,
-              formData
-            ),
-          };
-          // Add the values to inputs/submittedValues properly depending on if
-          // we've encountered multiple values for this input name or not
-          addValueFromSingleOrMultipleInput(inputName, inputInfo, inputs);
-          addValueFromSingleOrMultipleInput(inputName, value, submittedValues);
-          valid = valid && inputInfo.validity.valid;
-        } else {
-          console.warn(
-            `Skipping non-string value in FormData for field [${inputName}]`
-          );
+              submittedValues
+            );
+            valid = valid && inputInfo.validity?.valid === true;
+          } else {
+            console.warn(
+              `Skipping non-string value in FormData for field [${inputName}]`
+            );
+          }
         }
+      } else {
+        let inputInfo: InputInfo = {
+          touched: true,
+          dirty: true,
+          state: "done",
+          validity: await validateInput(
+            inputName,
+            inputDef,
+            "",
+            undefined,
+            formData
+          ),
+        };
+        inputs[inputName] = inputInfo;
+        submittedValues[inputName] = null;
       }
     })
   );
@@ -450,7 +557,7 @@ function generateFormDataFromServerFormInfo<T extends FormDefinition>(
 
 // Calculate a single validation attribute value to render onto an individual input
 function calculateValidationAttr(
-  attrValue: ValueOf<BuiltInValidationAttrs>,
+  attrValue: ValueOf<BuiltInValidationAttrs> | null,
   formData: FormData
 ) {
   return typeof attrValue === "function" ? attrValue(formData) : attrValue;
@@ -458,7 +565,7 @@ function calculateValidationAttr(
 
 // Calculate the validation attribute values to render onto an individual input
 function calculateValidationAttrs(
-  validationAttrs: InputDefinition["validationAttrs"],
+  validationAttrs: ControlDefinition["validationAttrs"],
   formData: FormData
 ) {
   let entries = Object.entries(validationAttrs || {}) as [
@@ -483,6 +590,72 @@ function hasDynamicAttributes(formDefinition: FormDefinition) {
     )
   );
 }
+
+function getClasses(
+  info: InputInfo,
+  type: "label" | SupportedControlTypes,
+  className?: string
+) {
+  let { validity, state, touched, dirty } = info;
+  return composeClassNames([
+    `rvs-${type}`,
+    shouldShowErrors(validity, state, touched) ? `rvs-${type}--invalid` : "",
+    state === "validating" ? `rvs-${type}--validating` : "",
+    touched ? `rvs-${type}--touched` : "",
+    dirty ? `rvs-${type}--dirty` : "",
+    className,
+  ]);
+}
+
+function shouldShowErrors(
+  validity: ExtendedValidityState | undefined,
+  state: AsyncValidationState,
+  touched: boolean
+) {
+  return validity?.valid === false && state === "done" && touched;
+}
+
+// Get attributes shared across input/textarea/select elements
+function getControlAttrs<T extends SupportedControlTypes>(
+  ctx: ReturnType<typeof useValidatedControl>,
+  controlType: T,
+  name?: string,
+  className?: string,
+  index?: number
+) {
+  return {
+    ref: ctx.composedRef,
+    name: ctx.name,
+    id: getInputId(ctx.name, ctx.id),
+    className: getClasses(ctx.info, controlType, className),
+    defaultValue: getInputDefaultValue(ctx.name, ctx.serverFormInfo, index),
+    ...(shouldShowErrors(ctx.info.validity, ctx.info.state, ctx.info.touched)
+      ? {
+          "aria-invalid": true,
+          "aria-errormessage": getErrorsId(name || ctx.name, ctx.id),
+        }
+      : {}),
+    ...ctx.validationAttrs,
+  };
+}
+
+// For checkbox/radio inputs, we need to listen across all inputs for the given
+// name to update the validate as a group
+function registerMultipleEventListeners(
+  inputEl: SupportedHTMLElements,
+  event: "blur" | "change" | "input",
+  handler: () => void
+) {
+  let selector = `input[type="${inputEl.type}"][name="${inputEl.name}"]`;
+  Array.from(inputEl.form?.querySelectorAll(selector) || []).forEach((el) =>
+    el.addEventListener(event, handler)
+  );
+  return () => {
+    Array.from(inputEl?.form?.querySelectorAll(selector) || []).forEach((el) =>
+      el.removeEventListener(event, handler)
+    );
+  };
+}
 //#endregion
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -503,21 +676,25 @@ export function useOptionalFormContext<
   return null;
 }
 
-interface UseValidatedInputOpts<T extends FormDefinition> {
+interface UseValidatedControlOpts<
+  T extends FormDefinition,
+  E extends SupportedHTMLElements
+> {
   name: KeyOf<T["inputs"]>;
   formDefinition?: T;
   serverFormInfo?: ServerFormInfo<T>;
   ref?:
-    | React.ForwardedRef<HTMLInputElement | null | undefined>
-    | React.Ref<HTMLInputElement | null | undefined>;
+    | React.ForwardedRef<E | null | undefined>
+    | React.Ref<E | null | undefined>;
   index?: number;
   forceUpdate?: any;
 }
 
-// Handle validations for a single input
-export function useValidatedInput<T extends FormDefinition>(
-  opts: UseValidatedInputOpts<T>
-) {
+// Handle validations for a single form control
+function useValidatedControl<
+  T extends FormDefinition,
+  E extends SupportedHTMLElements
+>(opts: UseValidatedControlOpts<T, E>) {
   let ctx = useOptionalFormContext<T>();
   let name = opts.name;
   let formDefinition = opts.formDefinition || ctx?.formDefinition;
@@ -542,7 +719,7 @@ export function useValidatedInput<T extends FormDefinition>(
 
   let serverFormInfo = opts.serverFormInfo || ctx?.serverFormInfo;
   let wasSubmitted = false;
-  let serverValue: string | undefined = undefined;
+  let serverValue: string | null = null;
   let serverValidity: InputInfo["validity"] = undefined;
 
   if (serverFormInfo != null) {
@@ -571,7 +748,7 @@ export function useValidatedInput<T extends FormDefinition>(
   let prevServerFormInfo = React.useRef<ServerFormInfo<T> | undefined>(
     serverFormInfo
   );
-  let inputRef = React.useRef<HTMLInputElement>(null);
+  let inputRef = React.useRef<E>(null);
   let composedRef = useComposedRefs(inputRef, opts.ref);
   let [value, setValue] = React.useState(serverValue || "");
   let [dirty, setDirty] = React.useState<boolean>(wasSubmitted);
@@ -590,6 +767,10 @@ export function useValidatedInput<T extends FormDefinition>(
     ? generateFormDataFromServerFormInfo(serverFormInfo.submittedValues)
     : new FormData();
 
+  let elementType = inputDef.element;
+  let inputType = IsInputDefinition(inputDef)
+    ? inputDef.validationAttrs?.type
+    : null;
   let validationAttrs = calculateValidationAttrs(
     inputDef.validationAttrs,
     formData
@@ -620,9 +801,6 @@ export function useValidatedInput<T extends FormDefinition>(
       }, {});
   }
 
-  let showErrors =
-    validity?.valid === false && validationState === "done" && touched;
-
   // Set InputInfo.touched on `blur` events
   React.useEffect(() => {
     let inputEl = inputRef.current;
@@ -630,23 +808,39 @@ export function useValidatedInput<T extends FormDefinition>(
       return;
     }
     let handler = () => setTouched(true);
+
+    if (inputType === "checkbox" || inputType === "radio") {
+      return registerMultipleEventListeners(inputEl, "blur", handler);
+    }
+
     inputEl.addEventListener("blur", handler);
     return () => inputEl?.removeEventListener("blur", handler);
-  }, [inputRef]);
+  }, [inputRef, name, inputType]);
 
-  // Set value and InputInfo.dirst on `input` events
+  // Set value and InputInfo.dirty on `input` events
   React.useEffect(() => {
     let inputEl = inputRef.current;
     if (!inputEl) {
       return;
     }
-    let handler = function (this: HTMLInputElement) {
+    let event: "change" | "input" =
+      elementType === "select" ||
+      inputType === "radio" ||
+      inputType === "checkbox"
+        ? "change"
+        : "input";
+    let handler = function (this: E) {
       setDirty(true);
       setValue(this.value);
     };
-    inputEl.addEventListener("input", handler);
-    return () => inputEl?.removeEventListener("input", handler);
-  }, [inputRef]);
+
+    if (inputType === "checkbox" || inputType === "radio") {
+      return registerMultipleEventListeners(inputEl, event, handler);
+    }
+
+    inputEl.addEventListener(event, handler);
+    return () => inputEl?.removeEventListener(event, handler);
+  }, [elementType, inputRef, inputType, name]);
 
   // Run validations on input value changes
   React.useEffect(() => {
@@ -683,12 +877,27 @@ export function useValidatedInput<T extends FormDefinition>(
       let localController = new AbortController();
       controller.current = localController;
       setValidationState("validating");
-      const validity = await validateInput(
-        name,
-        inputDef,
-        value,
-        inputRef.current || undefined
-      );
+
+      let validity: ExtendedValidityState;
+      if (inputType === "radio" || inputType === "checkbox") {
+        validity = await validateInput(
+          name,
+          inputDef,
+          value,
+          Array.from(
+            inputRef.current?.form?.querySelectorAll(
+              `input[type="${inputType}"][name="${name}"]`
+            ) || []
+          )
+        );
+      } else {
+        validity = await validateInput(
+          name,
+          inputDef,
+          value,
+          inputRef.current || undefined
+        );
+      }
       if (localController.signal.aborted) {
         return;
       }
@@ -702,48 +911,30 @@ export function useValidatedInput<T extends FormDefinition>(
 
     // Important: forceUpdate must remain included in the deps array for
     // auto-revalidation on dynamic attribute value changes
-  }, [forceUpdate, name, inputDef, value, serverFormInfo, serverValidity]);
+  }, [
+    forceUpdate,
+    name,
+    inputType,
+    inputDef,
+    value,
+    serverFormInfo,
+    serverValidity,
+  ]);
 
-  function getClasses(type: "label" | "input", className?: string) {
-    return composeClassNames([
-      `rvs-${type}`,
-      showErrors ? `rvs-${type}--invalid` : "",
-      validationState === "validating" ? `rvs-${type}--validating` : "",
-      touched ? `rvs-${type}--touched` : "",
-      dirty ? `rvs-${type}--dirty` : "",
-      className,
-    ]);
-  }
-
-  // Provide the caller a prop getter to be spread onto the <input>
-  function getInputAttrs({
-    ...attrs
-  }: React.ComponentPropsWithoutRef<"input"> = {}): React.ComponentPropsWithoutRef<"input"> {
-    let inputAttrs = {
-      ref: composedRef,
-      name,
-      id: getInputId(name, id),
-      className: getClasses("input", attrs.className),
-      defaultValue: getInputDefaultValue(name, serverFormInfo, opts.index),
-      ...(showErrors
-        ? {
-            "aria-invalid": true,
-            "aria-errormessage": getErrorsId(attrs.name || name, id),
-          }
-        : {}),
-      ...validationAttrs,
-      ...omit(attrs, "className", "ref"),
-    };
-
-    return inputAttrs;
-  }
+  let info: InputInfo = {
+    dirty,
+    touched,
+    state: validationState,
+    validity,
+    errorMessages: currentErrorMessages,
+  };
 
   // Provide the caller a prop getter to be spread onto the <label>
   function getLabelAttrs({
     ...attrs
   }: React.ComponentPropsWithoutRef<"label"> = {}): React.ComponentPropsWithoutRef<"label"> {
     return {
-      className: getClasses("label", attrs.className),
+      className: getClasses(info, "label", attrs.className),
       htmlFor: getInputId(name, id),
       ...omit(attrs, "className"),
     };
@@ -757,23 +948,152 @@ export function useValidatedInput<T extends FormDefinition>(
     return {
       className: composeClassNames(["rvs-errors", attrs.className]),
       id: getErrorsId(name, id),
-      ...(showErrors ? { role: "alert" } : {}),
+      ...(shouldShowErrors(info.validity, info.state, info.touched)
+        ? { role: "alert" }
+        : {}),
       ...omit(attrs, "className"),
     };
   }
 
   return {
-    info: {
-      dirty,
-      touched,
-      state: validationState,
-      validity,
-      errorMessages: currentErrorMessages,
-    } as InputInfo,
+    name,
+    id,
+    validationAttrs,
+    composedRef,
+    info,
+    serverFormInfo,
     controller,
-    getInputAttrs,
     getLabelAttrs,
     getErrorsAttrs,
+  };
+}
+
+interface UseValidatedInputOpts<T extends FormDefinition> {
+  name: KeyOf<T["inputs"]>;
+  formDefinition?: T;
+  serverFormInfo?: ServerFormInfo<T>;
+  ref?:
+    | React.ForwardedRef<HTMLInputElement | null | undefined>
+    | React.Ref<HTMLInputElement | null | undefined>;
+  index?: number;
+  forceUpdate?: any;
+}
+
+// User-facing useValidatedControl wrapper for <input> elements
+export function useValidatedInput<T extends FormDefinition>(
+  opts: UseValidatedInputOpts<T>
+) {
+  let ctx = useValidatedControl<T, HTMLInputElement>(opts);
+
+  // Provide the caller a prop getter to be spread onto the <input>
+  function getInputAttrs({
+    ...attrs
+  }: React.ComponentPropsWithoutRef<"input"> = {}): React.ComponentPropsWithoutRef<"input"> {
+    let controlAttrs = getControlAttrs(
+      ctx,
+      "input",
+      attrs.name,
+      attrs.className,
+      opts.index
+    );
+    return {
+      ...controlAttrs,
+      ...omit(attrs, "className", "ref"),
+    };
+  }
+
+  return {
+    info: ctx.info,
+    controller: ctx.controller,
+    getLabelAttrs: ctx.getLabelAttrs,
+    getErrorsAttrs: ctx.getErrorsAttrs,
+    getInputAttrs,
+  };
+}
+
+interface UseValidatedTextAreaOpts<T extends FormDefinition> {
+  name: KeyOf<T["inputs"]>;
+  formDefinition?: T;
+  serverFormInfo?: ServerFormInfo<T>;
+  ref?:
+    | React.ForwardedRef<HTMLTextAreaElement | null | undefined>
+    | React.Ref<HTMLTextAreaElement | null | undefined>;
+  index?: number;
+  forceUpdate?: any;
+}
+
+// User-facing useValidatedControl wrapper for <textarea> elements
+export function useValidatedTextArea<T extends FormDefinition>(
+  opts: UseValidatedTextAreaOpts<T>
+) {
+  let ctx = useValidatedControl<T, HTMLTextAreaElement>(opts);
+
+  // Provide the caller a prop getter to be spread onto the <textarea>
+  function getTextAreaAttrs({
+    ...attrs
+  }: React.ComponentPropsWithoutRef<"textarea"> = {}): React.ComponentPropsWithoutRef<"textarea"> {
+    let controlAttrs = getControlAttrs(
+      ctx,
+      "textarea",
+      attrs.name,
+      attrs.className,
+      opts.index
+    );
+    return {
+      ...controlAttrs,
+      ...omit(attrs, "className", "ref"),
+    };
+  }
+
+  return {
+    info: ctx.info,
+    controller: ctx.controller,
+    getLabelAttrs: ctx.getLabelAttrs,
+    getErrorsAttrs: ctx.getErrorsAttrs,
+    getTextAreaAttrs,
+  };
+}
+
+interface UseValidatedSelectOpts<T extends FormDefinition> {
+  name: KeyOf<T["inputs"]>;
+  formDefinition?: T;
+  serverFormInfo?: ServerFormInfo<T>;
+  ref?:
+    | React.ForwardedRef<HTMLSelectElement | null | undefined>
+    | React.Ref<HTMLSelectElement | null | undefined>;
+  index?: number;
+  forceUpdate?: any;
+}
+
+// User-facing useValidatedControl wrapper for <textarea> elements
+export function useValidatedSelect<T extends FormDefinition>(
+  opts: UseValidatedSelectOpts<T>
+) {
+  let ctx = useValidatedControl<T, HTMLSelectElement>(opts);
+
+  // Provide the caller a prop getter to be spread onto the <textarea>
+  function getSelectAttrs({
+    ...attrs
+  }: React.ComponentPropsWithoutRef<"select"> = {}): React.ComponentPropsWithoutRef<"select"> {
+    let controlAttrs = getControlAttrs(
+      ctx,
+      "select",
+      attrs.name,
+      attrs.className,
+      opts.index
+    );
+    return {
+      ...controlAttrs,
+      ...omit(attrs, "className", "ref"),
+    };
+  }
+
+  return {
+    info: ctx.info,
+    controller: ctx.controller,
+    getLabelAttrs: ctx.getLabelAttrs,
+    getErrorsAttrs: ctx.getErrorsAttrs,
+    getSelectAttrs,
   };
 }
 
@@ -816,59 +1136,67 @@ export function FormProvider<T extends FormDefinition>(
   );
 }
 
-export interface FieldProps<T extends FormDefinition>
-  extends UseValidatedInputOpts<T>,
-    Omit<React.ComponentPropsWithoutRef<"input">, "name"> {
-  label: string;
-  index?: number;
-}
+export interface ControlWrapperProps<
+  T extends FormDefinition
+> extends React.PropsWithChildren<{
+    name: string;
+    label?: string;
+    labelAttrs: React.ComponentPropsWithoutRef<"label">;
+    errorAttrs: React.ComponentPropsWithoutRef<"ul">;
+    formDefinition?: T;
+    serverFormInfo?: ServerFormInfo<T>;
+    info: InputInfo;
+  }> {}
 
-// Syntactic sugar component to handle <label>/<input> and error displays
-export function Field<T extends FormDefinition>({
+// Internal utility component to handle <label> and error displays while leaving
+// the <input></<textarea> control rendering to the calling component
+function ControlWrapper<T extends FormDefinition>({
   name,
-  formDefinition: formDefinitionProp,
-  serverFormInfo: serverFormInfoProp,
   label,
-  index,
-  ...inputAttrs
-}: FieldProps<T>) {
-  let ctx = useOptionalFormContext<T>();
-  let formDefinition = formDefinitionProp || ctx?.formDefinition;
-  let serverFormInfo = serverFormInfoProp || ctx?.serverFormInfo;
-  let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } =
-    useValidatedInput({ name, formDefinition, serverFormInfo, index });
-
+  labelAttrs,
+  errorAttrs,
+  formDefinition,
+  serverFormInfo,
+  info,
+  children,
+}: ControlWrapperProps<T>) {
   invariant(
     formDefinition,
-    `No form definition found for <Field name="${name}">`
+    `No form definition found for form control with name "${name}">`
   );
+
+  // Not all input types can have a required attribute
+  let validationAttrs =
+    formDefinition.inputs[name] && formDefinition.inputs[name].validationAttrs
+      ? formDefinition.inputs[name].validationAttrs
+      : null;
+  let isRequired =
+    validationAttrs && "required" in validationAttrs
+      ? validationAttrs.required === true
+      : false;
 
   let showErrors = serverFormInfo != null || info.touched;
 
   return (
     <>
-      <label {...getLabelAttrs()}>
-        {label}
-        {formDefinition.inputs[name]?.validationAttrs?.required ? "*" : null}
-      </label>
-      <input
-        {...getInputAttrs({
-          defaultValue: getInputDefaultValue(name, serverFormInfo, index),
-          ...inputAttrs,
-        })}
-      />
-
+      {label ? (
+        <label {...labelAttrs}>
+          {label}
+          {isRequired ? "*" : null}
+        </label>
+      ) : null}
+      {children}
       {/* Display validation state */}
-      {showErrors ? <FieldErrors info={info} {...getErrorsAttrs()} /> : null}
+      {showErrors ? <ControlErrors info={info} {...errorAttrs} /> : null}
     </>
   );
 }
 
-interface FieldErrorsProps extends React.ComponentPropsWithoutRef<"ul"> {
+interface ControlErrorsProps extends React.ComponentPropsWithoutRef<"ul"> {
   info: InputInfo;
 }
 
-function FieldErrors({ info, ...attrs }: FieldErrorsProps) {
+function ControlErrors({ info, ...attrs }: ControlErrorsProps) {
   if (info.state === "idle") {
     return null;
   }
@@ -879,6 +1207,135 @@ function FieldErrors({ info, ...attrs }: FieldErrorsProps) {
     return null;
   }
   return <Errors {...attrs} messages={info.errorMessages} />;
+}
+
+export interface InputProps<T extends FormDefinition>
+  extends UseValidatedInputOpts<T>,
+    Omit<React.ComponentPropsWithoutRef<"input">, "name"> {
+  label: string;
+  index?: number;
+}
+
+// Syntactic sugar component to handle <label>/<input> and error displays
+export function Input<T extends FormDefinition>({
+  name,
+  formDefinition: formDefinitionProp,
+  serverFormInfo: serverFormInfoProp,
+  label,
+  index,
+  ...inputAttrs
+}: InputProps<T>) {
+  let ctx = useOptionalFormContext<T>();
+  let formDefinition = formDefinitionProp || ctx?.formDefinition;
+  let serverFormInfo = serverFormInfoProp || ctx?.serverFormInfo;
+  let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } =
+    useValidatedInput({ name, formDefinition, serverFormInfo, index });
+
+  return (
+    <ControlWrapper
+      name={name}
+      label={label}
+      labelAttrs={getLabelAttrs()}
+      errorAttrs={getErrorsAttrs()}
+      formDefinition={formDefinition}
+      serverFormInfo={serverFormInfo}
+      info={info}
+    >
+      <input
+        {...getInputAttrs({
+          defaultValue: getInputDefaultValue(name, serverFormInfo, index),
+          ...inputAttrs,
+        })}
+      />
+    </ControlWrapper>
+  );
+}
+
+export interface TextAreaProps<T extends FormDefinition>
+  extends UseValidatedInputOpts<T>,
+    Omit<React.ComponentPropsWithoutRef<"textarea">, "name"> {
+  label: string;
+  index?: number;
+}
+
+// Syntactic sugar component to handle <label>/<input> and error displays
+export function TextArea<T extends FormDefinition>({
+  name,
+  formDefinition: formDefinitionProp,
+  serverFormInfo: serverFormInfoProp,
+  label,
+  index,
+  ...inputAttrs
+}: TextAreaProps<T>) {
+  let ctx = useOptionalFormContext<T>();
+  let formDefinition = formDefinitionProp || ctx?.formDefinition;
+  let serverFormInfo = serverFormInfoProp || ctx?.serverFormInfo;
+  let { info, getTextAreaAttrs, getLabelAttrs, getErrorsAttrs } =
+    useValidatedTextArea({ name, formDefinition, serverFormInfo, index });
+
+  return (
+    <ControlWrapper
+      name={name}
+      label={label}
+      labelAttrs={getLabelAttrs()}
+      errorAttrs={getErrorsAttrs()}
+      formDefinition={formDefinition}
+      serverFormInfo={serverFormInfo}
+      info={info}
+    >
+      <textarea
+        {...getTextAreaAttrs({
+          defaultValue: getInputDefaultValue(name, serverFormInfo, index),
+          ...inputAttrs,
+        })}
+      />
+    </ControlWrapper>
+  );
+}
+
+export interface SelectProps<T extends FormDefinition>
+  extends UseValidatedSelectOpts<T>,
+    Omit<React.ComponentPropsWithoutRef<"select">, "name"> {
+  label: string;
+  index?: number;
+}
+
+// Syntactic sugar component to handle <label>/<input> and error displays
+export function Select<T extends FormDefinition>({
+  name,
+  formDefinition: formDefinitionProp,
+  serverFormInfo: serverFormInfoProp,
+  label,
+  index,
+  children,
+  ...inputAttrs
+}: SelectProps<T>) {
+  let ctx = useOptionalFormContext<T>();
+  let formDefinition = formDefinitionProp || ctx?.formDefinition;
+  let serverFormInfo = serverFormInfoProp || ctx?.serverFormInfo;
+  let { info, getSelectAttrs, getLabelAttrs, getErrorsAttrs } =
+    useValidatedSelect({ name, formDefinition, serverFormInfo, index });
+
+  return (
+    <ControlWrapper
+      name={name}
+      label={label}
+      labelAttrs={getLabelAttrs()}
+      errorAttrs={getErrorsAttrs()}
+      formDefinition={formDefinition}
+      serverFormInfo={serverFormInfo}
+      info={info}
+    >
+      <select
+        {...getSelectAttrs({
+          defaultValue: getInputDefaultValue(name, serverFormInfo, index),
+          ...inputAttrs,
+        })}
+      >
+        {children}
+      </select>
+    </ControlWrapper>
+  );
 }
 
 export interface ErrorProps {
