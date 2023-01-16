@@ -1,11 +1,13 @@
-import { Form, useActionData } from "@remix-run/react";
 import type { ActionArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
+import { Form, useActionData } from "@remix-run/react";
 import * as React from "react";
 import type {
   ErrorMessage,
   InputDefinition,
+  SelectDefinition,
   ServerFormInfo,
+  TextAreaDefinition,
 } from "remix-validity-state";
 import {
   Field,
@@ -22,11 +24,11 @@ interface FormSchema {
     middleInitial: InputDefinition;
     lastName: InputDefinition;
     emailAddress: InputDefinition;
-    story: InputDefinition;
     hobby: InputDefinition;
     low: InputDefinition;
     high: InputDefinition;
-    favoriteColor: InputDefinition;
+    story: TextAreaDefinition;
+    favoriteColor: SelectDefinition;
     skills: InputDefinition;
     favoriteSkill: InputDefinition;
   };
@@ -73,12 +75,6 @@ let formDefinition: FormSchema = {
         },
       },
     },
-    story: {
-      validationAttrs: {
-        required: true,
-        minLength: 10,
-      },
-    },
     hobby: {
       validationAttrs: {
         required: true,
@@ -96,7 +92,15 @@ let formDefinition: FormSchema = {
         min: (fd) => (fd.get("low") ? Number(fd.get("low")) : undefined),
       },
     },
+    story: {
+      element: "textarea",
+      validationAttrs: {
+        required: true,
+        minLength: 10,
+      },
+    },
     favoriteColor: {
+      element: "select",
       validationAttrs: {
         required: true,
       },
@@ -133,6 +137,7 @@ export const action = async ({ request }: ActionArgs) => {
   if (!serverFormInfo.valid) {
     return json({ serverFormInfo });
   }
+
   return redirect("/");
 };
 
@@ -281,7 +286,9 @@ export default function Index() {
           border-color: red;
         }
 
-        .rvs-input.rvs-input--touched:not(.rvs-input--invalid):not(.rvs-input--validating) {
+        .rvs-input.rvs-input--touched:not(.rvs-input--invalid):not(.rvs-input--validating),
+        .rvs-textarea.rvs-textarea--touched:not(.rvs-textarea--invalid):not(.rvs-textarea--validating),
+        .rvs-select.rvs-select--touched:not(.rvs-select--invalid):not(.rvs-select--validating) {
             border-color: lightgreen;
         }
 
@@ -382,15 +389,6 @@ export default function Index() {
 
           <div className="demo-input-container">
             <p className="demo-input-message">
-              This story textarea is required with a minlength of 10
-            </p>
-            <div className="demo-input">
-              <TextArea name="story" label="Tell me a story:" />
-            </div>
-          </div>
-
-          <div className="demo-input-container">
-            <p className="demo-input-message">
               Each of these hobby inputs has <code>required="true"</code>
             </p>
             <div className="demo-input">
@@ -408,6 +406,16 @@ export default function Index() {
             <div className="demo-input">
               <Field<FormSchema> name="low" label="Low" />
               <Field<FormSchema> name="high" label="High" />
+            </div>
+          </div>
+
+          <div className="demo-input-container">
+            <p className="demo-input-message">
+              This story <code>textarea</code> has <code>required="true"</code>{" "}
+              and <code>minlength="10"</code>
+            </p>
+            <div className="demo-input">
+              <TextArea name="story" label="Tell me a story:" />
             </div>
           </div>
 

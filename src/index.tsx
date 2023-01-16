@@ -33,11 +33,53 @@ interface BuiltInValidationAttrs {
   maxLength?: number | BuiltInValidationAttrsFunction<number>;
   min?: number | BuiltInValidationAttrsFunction<number>;
   max?: number | BuiltInValidationAttrsFunction<number>;
-  // TODO: Pattern not valid on select/textarea - can we enforce this via types?
-  // Set up a discriminated union in InputDefinition based on element:'select'?
-  // https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/pattern
   pattern?: string | BuiltInValidationAttrsFunction<string>;
 }
+
+// Valid attributes by input type.  See:
+// https://html.spec.whatwg.org/multipage/input.html#do-not-apply
+
+type InputTextValidationAttrs = {
+  type?: "text" | "search" | "url" | "tel" | "email" | "password";
+} & Pick<
+  BuiltInValidationAttrs,
+  "required" | "minLength" | "maxLength" | "pattern"
+>;
+
+type InputDateValidationAttrs = {
+  type: "date" | "month" | "week" | "time" | "datetime-local";
+} & Pick<BuiltInValidationAttrs, "required" | "min" | "max">;
+
+type InputNumberValidationAttrs = {
+  type: "number";
+} & Pick<BuiltInValidationAttrs, "required" | "min" | "max">;
+
+type InputRangeValidationAttrs = {
+  type: "range";
+} & Pick<BuiltInValidationAttrs, "min" | "max">;
+
+type InputCheckboxValidationAttrs = {
+  type: "checkbox";
+} & Pick<BuiltInValidationAttrs, "required">;
+
+type InputRadioValidationAttrs = {
+  type: "radio";
+} & Pick<BuiltInValidationAttrs, "required">;
+
+type TextAreaValidationAttrs = Pick<
+  BuiltInValidationAttrs,
+  "required" | "minLength" | "maxLength"
+>;
+
+type SelectValidationAttrs = Pick<BuiltInValidationAttrs, "required">;
+
+type InputValidationAttrs =
+  | InputTextValidationAttrs
+  | InputDateValidationAttrs
+  | InputNumberValidationAttrs
+  | InputRangeValidationAttrs
+  | InputCheckboxValidationAttrs
+  | InputRadioValidationAttrs;
 
 type ValidityStateKey = KeyOf<
   Pick<
@@ -72,20 +114,39 @@ export type ErrorMessage =
 /**
  * Definition for a single input in a form (validations + error messages)
  */
-export interface InputDefinition {
-  validationAttrs?: BuiltInValidationAttrs;
+interface BaseControlDefinition {
   customValidations?: CustomValidations;
   errorMessages?: {
     [key: string]: ErrorMessage;
   };
 }
 
+export interface InputDefinition extends BaseControlDefinition {
+  element?: "input";
+  validationAttrs?: InputValidationAttrs;
+}
+
+export interface TextAreaDefinition extends BaseControlDefinition {
+  element: "textarea";
+  validationAttrs?: TextAreaValidationAttrs;
+}
+
+export interface SelectDefinition extends BaseControlDefinition {
+  element: "select";
+  validationAttrs?: SelectValidationAttrs;
+}
+
+type ControlDefinition =
+  | InputDefinition
+  | TextAreaDefinition
+  | SelectDefinition;
+
 /**
  * Form information (inputs, validations, error messages)
  */
 export interface FormDefinition {
   inputs: {
-    [key: string]: InputDefinition;
+    [key: string]: ControlDefinition;
   };
   errorMessages: {
     [key: string]: ErrorMessage;
@@ -294,11 +355,17 @@ function getBaseValidityState(): ExtendedValidityState {
   };
 }
 
+function IsInputDefinition(
+  inputDef: ControlDefinition
+): inputDef is InputDefinition {
+  return inputDef.element === "input" || inputDef.element == null;
+}
+
 // Perform all specified html validations for a single input
 // Called in a useEffect client side and from validateServerFormIno server-side
 async function validateInput(
   inputName: string,
-  inputDef: InputDefinition,
+  inputDef: ControlDefinition,
   value: string,
   inputEl?: SupportedHTMLElements | SupportedHTMLElements[], // CSR
   formData?: FormData // SSR
@@ -317,10 +384,14 @@ async function validateInput(
   if (inputDef.validationAttrs) {
     for (let _attr of Object.keys(inputDef.validationAttrs)) {
       let attr = _attr as KeyOf<BuiltInValidationAttrs>;
-      let attrValue = calculateValidationAttr(
-        inputDef.validationAttrs[attr],
-        formData
-      );
+      // Ignoring this "error" since the type narrowing to accomplish this
+      // would be nasty due to the differences in attribute values per input
+      // type.  We're going to rely on the *ValidationAttrs types to ensure
+      // users are specifying valid attributes up front in their schemas and
+      // just yolo this lookup
+      // @ts-expect-error
+      let _attrValue = inputDef.validationAttrs[attr] || null;
+      let attrValue = calculateValidationAttr(_attrValue, formData);
       // Undefined attr values means the attribute doesn't exist and there's
       // nothing to validate
       if (attrValue == null) {
@@ -368,7 +439,7 @@ export async function validateServerFormData<T extends FormDefinition>(
 
   let valid = true;
   let entries = Object.entries(formDefinition.inputs) as Array<
-    [KeyOf<T["inputs"]>, InputDefinition]
+    [KeyOf<T["inputs"]>, ControlDefinition]
   >;
   await Promise.all(
     entries.map(async ([inputName, inputDef]) => {
@@ -486,7 +557,7 @@ function generateFormDataFromServerFormInfo<T extends FormDefinition>(
 
 // Calculate a single validation attribute value to render onto an individual input
 function calculateValidationAttr(
-  attrValue: ValueOf<BuiltInValidationAttrs>,
+  attrValue: ValueOf<BuiltInValidationAttrs> | null,
   formData: FormData
 ) {
   return typeof attrValue === "function" ? attrValue(formData) : attrValue;
@@ -494,7 +565,7 @@ function calculateValidationAttr(
 
 // Calculate the validation attribute values to render onto an individual input
 function calculateValidationAttrs(
-  validationAttrs: InputDefinition["validationAttrs"],
+  validationAttrs: ControlDefinition["validationAttrs"],
   formData: FormData
 ) {
   let entries = Object.entries(validationAttrs || {}) as [
@@ -696,6 +767,10 @@ function useValidatedControl<
     ? generateFormDataFromServerFormInfo(serverFormInfo.submittedValues)
     : new FormData();
 
+  let elementType = inputDef.element;
+  let inputType = IsInputDefinition(inputDef)
+    ? inputDef.validationAttrs?.type
+    : null;
   let validationAttrs = calculateValidationAttrs(
     inputDef.validationAttrs,
     formData
@@ -732,7 +807,6 @@ function useValidatedControl<
     if (!inputEl) {
       return;
     }
-    let inputType = inputDef.validationAttrs?.type;
     let handler = () => setTouched(true);
 
     if (inputType === "checkbox" || inputType === "radio") {
@@ -741,7 +815,7 @@ function useValidatedControl<
 
     inputEl.addEventListener("blur", handler);
     return () => inputEl?.removeEventListener("blur", handler);
-  }, [inputDef.validationAttrs?.type, inputRef, name]);
+  }, [inputRef, name, inputType]);
 
   // Set value and InputInfo.dirty on `input` events
   React.useEffect(() => {
@@ -749,9 +823,12 @@ function useValidatedControl<
     if (!inputEl) {
       return;
     }
-    let inputType = inputDef.validationAttrs?.type;
     let event: "change" | "input" =
-      inputType === "radio" || inputType === "checkbox" ? "change" : "input";
+      elementType === "select" ||
+      inputType === "radio" ||
+      inputType === "checkbox"
+        ? "change"
+        : "input";
     let handler = function (this: E) {
       setDirty(true);
       setValue(this.value);
@@ -763,7 +840,7 @@ function useValidatedControl<
 
     inputEl.addEventListener(event, handler);
     return () => inputEl?.removeEventListener(event, handler);
-  }, [inputRef, inputDef.validationAttrs?.type, name]);
+  }, [elementType, inputRef, inputType, name]);
 
   // Run validations on input value changes
   React.useEffect(() => {
@@ -802,7 +879,6 @@ function useValidatedControl<
       setValidationState("validating");
 
       let validity: ExtendedValidityState;
-      let inputType = inputDef.validationAttrs?.type;
       if (inputType === "radio" || inputType === "checkbox") {
         let selector = `input[type="${inputType}"][name="${name}"]`;
         console.log("validating for selector", selector);
@@ -833,7 +909,15 @@ function useValidatedControl<
 
     // Important: forceUpdate must remain included in the deps array for
     // auto-revalidation on dynamic attribute value changes
-  }, [forceUpdate, name, inputDef, value, serverFormInfo, serverValidity]);
+  }, [
+    forceUpdate,
+    name,
+    inputType,
+    inputDef,
+    value,
+    serverFormInfo,
+    serverValidity,
+  ]);
 
   let info: InputInfo = {
     dirty,
@@ -1079,6 +1163,16 @@ function ControlWrapper<T extends FormDefinition>({
     `No form definition found for form control with name "${name}">`
   );
 
+  // Not all input types can have a required attribute
+  let validationAttrs =
+    formDefinition.inputs[name] && formDefinition.inputs[name].validationAttrs
+      ? formDefinition.inputs[name].validationAttrs
+      : null;
+  let isRequired =
+    validationAttrs && "required" in validationAttrs
+      ? validationAttrs.required === true
+      : false;
+
   let showErrors = serverFormInfo != null || info.touched;
 
   return (
@@ -1086,7 +1180,7 @@ function ControlWrapper<T extends FormDefinition>({
       {label ? (
         <label {...labelAttrs}>
           {label}
-          {formDefinition.inputs[name]?.validationAttrs?.required ? "*" : null}
+          {isRequired ? "*" : null}
         </label>
       ) : null}
       {children}
