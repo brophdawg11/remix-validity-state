@@ -14,7 +14,7 @@
     - [Getting Started](#getting-started)
       - [Define your form validations](#define-your-form-validations)
       - [Provide your validations via `FormProvider`](#provide-your-validations-via-formprovider)
-      - [Render `<Field>` Components inside your `FormProvider`](#render-field-components-inside-your-formprovider)
+      - [Render `<Input>` Components inside your `FormProvider`](#render-input-components-inside-your-formprovider)
       - [Wire up server-side validations](#wire-up-server-side-validations)
       - [Add your server action response to the `FormProvider`](#add-your-server-action-response-to-the-formprovider)
       - [That's it!](#thats-it)
@@ -23,6 +23,8 @@
       - [Multiple Inputs with the Same Name](#multiple-inputs-with-the-same-name)
       - [Dynamic (Form-Dependent) Validation Attributes](#dynamic-form-dependent-validation-attributes)
       - [Custom Validations](#custom-validations)
+      - [Textarea and Select Elements](#textarea-and-select-elements)
+      - [Radio and Checkbox Inputs](#radio-and-checkbox-inputs)
       - [Error Messages](#error-messages)
       - [useValidatedInput()](#usevalidatedinput)
       - [Styling](#styling)
@@ -146,7 +148,7 @@ function MyFormPage() {
 }
 ```
 
-#### Render `<Field>` Components inside your `FormProvider`
+#### Render `<Input>` Components inside your `FormProvider`
 
 ```jsx
 import { FormProvider } from "remix-validity-state";
@@ -154,16 +156,16 @@ import { FormProvider } from "remix-validity-state";
 function MyFormPage() {
   return (
     <FormProvider formDefinition={formDefinition}>
-      <Field name="firstName" label="First Name" />
-      <Field name="middleInitial" label="Middle Name" />
-      <Field name="lastName" label="Last Name" />
-      <Field name="emailAddress" label="Email Address" />
+      <Input name="firstName" label="First Name" />
+      <Input name="middleInitial" label="Middle Name" />
+      <Input name="lastName" label="Last Name" />
+      <Input name="emailAddress" label="Email Address" />
     </FormProvider>
   );
 }
 ```
 
-The `<Field>` component is our wrapper that handles the `<label>`, `<input>`, and real-time error display. The `name` serves as the key and will look up our validation attributes from your `formDefinition` and include them on the underlying `<input />`.
+The `<Input>` component is our wrapper that handles the `<label>`, `<input>`, and real-time error display. The `name` serves as the key and will look up our validation attributes from your `formDefinition` and include them on the underlying `<input />`.
 
 #### Wire up server-side validations
 
@@ -205,10 +207,10 @@ export default function MyRemixRouteComponent() {
       formDefinition={formDefinition},
       serverFormInfo={actionData?.serverFormInfo},
     >
-      <Field name="firstName" label="First Name" />
-      <Field name="middleInitial" label="Middle Name" />
-      <Field name="lastName" label="Last Name" />
-      <Field name="emailAddress" label="Email Address" />
+      <Input name="firstName" label="First Name" />
+      <Input name="middleInitial" label="Middle Name" />
+      <Input name="lastName" label="Last Name" />
+      <Input name="emailAddress" label="Email Address" />
     </FormProvider>
   );
 }
@@ -294,7 +296,7 @@ let formDefinition: FormSchema = {
 };
 ```
 
-In order for dynamic/form-dependent validations like this to work reliably, we have to be able to update one input when the value of _another_ input changes. By default, `useValidatedInput` and `<Field>` are scoped to a single input. So if you are using dynamic built-in validations then you should provide a `<FormProvider formRef>` property with a ref to your form element, that way the library can listen for `change` events and update dependent validations accordingly.
+In order for dynamic/form-dependent validations like this to work reliably, we have to be able to update one input when the value of _another_ input changes. By default, `useValidatedInput` and `<Input>` are scoped to a single input. So if you are using dynamic built-in validations then you should provide a `<FormProvider formRef>` property with a ref to your form element, that way the library can listen for `change` events and update dependent validations accordingly.
 
 #### Custom Validations
 
@@ -319,9 +321,111 @@ const formDefinition: FormSchema = {
 }
 ```
 
+#### Textarea and Select Elements
+
+Other control types work just like `<input>` but use a different type and are identified with an `element` prop. This allows for differentiation under the hood and proper type inference on the validation attributes allowed for different elements.
+
+```ts
+interface FormSchema {
+  inputs: {
+    biography: TextAreaDefinition;
+    country: SelectDefinition;
+  };
+}
+
+let formDefinition: FormSchema = {
+  inputs: {
+    biography: {
+      element: "textarea",
+      validationAttrs: {
+        required: true,
+        maxLength: 500,
+      },
+    },
+    country: {
+      element: "select",
+      validationAttrs: {
+        required: true,
+      },
+    },
+  },
+};
+```
+
+#### Radio and Checkbox Inputs
+
+Radio and Checkbox inputs are unique in that they generally have multiple inputs of the same name and validation is dependent upon the state of _all_ of the inputs.
+
+```ts
+interface FormSchema {
+  inputs: {
+    skills: InputDefinition;
+    favoriteFood: InputDefinition;
+  };
+}
+
+let formDefinition: FormSchema = {
+  inputs: {
+    programmingLanguages: {
+      validationAttrs: {
+        type: "checkbox",
+        required: true,
+        maxLength: 500,
+      },
+    },
+    favoriteFood: {
+      validationAttrs: {
+        type: "radio",
+        required: true,
+      },
+    },
+  },
+};
+```
+
+Because validation is across the group of them, it's not recommended to use the `<Input>` component, because that by default renders errors _per-input_. We really want them for the group of inputs. It's recommended to call `useValidatedInput` manually for these scenarios:
+
+```tsx
+function FavoriteSkill() {
+  let skills = ["React", "Vue", "Preact", "Angular", "Svelte", "Solid", "Qwik"];
+  let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } =
+    useValidatedInput<typeof formDefinition>({ name: "skills" });
+  // Since we'll share these attributes across all checkboxes we call these
+  // once here to avoid calling per-input.  And since we put the input inside
+  // the label we don't need the `for` attribute
+  let labelAttrs = getLabelAttrs({ htmlFor: undefined });
+  let inputAttrs = getInputAttrs();
+  return (
+    <fieldset>
+      <legend>Which skills do you have?</legend>
+
+      {/* Render checkboxes for each skill, making the id unique based on the skill */}
+      {skills.map((s) => (
+        <label key={s} {...labelAttrs}>
+          <input
+            {...{ ...inputAttrs, id: `${inputAttrs.id}--${s.toLowerCase()}` }}
+          />
+          &nbsp;
+          {s}
+        </label>
+      ))}
+
+      {/* Render errors once for the group of inputs */}
+      {info.touched && info.errorMessages ? (
+        <ul {...getErrorsAttrs()}>
+          {Object.entries(info.errorMessages).map(([validation, msg]) => (
+            <li key={validation}>🆘 {msg}</li>
+          ))}
+        </ul>
+      ) : null}
+    </fieldset>
+  );
+}
+```
+
 #### Error Messages
 
-Basic error messaging is handled out of the box by `<Field>` for built-in HTML validations. If you are using custom validations, or if you want to override the built-in messaging, you can provide custom error messages in our `formDefinition`. Custom error messages can either be a static string, or a function that receives the attribute value (built-in validations only), the input name, and the input value:
+Basic error messaging is handled out of the box by `<Input>` for built-in HTML validations. If you are using custom validations, or if you want to override the built-in messaging, you can provide custom error messages in our `formDefinition`. Custom error messages can either be a static string, or a function that receives the attribute value (built-in validations only), the input name, and the input value:
 
 ```ts
 const formDefinition: FormSchema = {
@@ -357,7 +461,7 @@ const formDefinition: FormSchema = {
 
 #### useValidatedInput()
 
-This is the bread and butter of the library - and `<Field>` is really nothing more than a wrapper around this hook. This is useful if you require more control over the direct rendering of your `input`, `label` or error elements. Let's take a look at what it gives you. The only required input is the input `name`:
+This is the bread and butter of the library - and `<Input>` is really nothing more than a wrapper around this hook. This is useful if you require more control over the direct rendering of your `input`, `label` or error elements. Let's take a look at what it gives you. The only required input is the input `name`:
 
 ```js
 let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } = useValidatedInput({
@@ -424,7 +528,7 @@ let { info } = useValidatedInput({
 
 #### Styling
 
-This library aims to be pretty hands-off when it comes to styling, since every use-case is so different. We expect most consumers will choose to create their own custom markup with direct usage of `useValidatedInput`. However, for simple use-cases of `<Field />` we expose a handful of stateful classes on the elements you may hook into with your own custom styles:
+This library aims to be pretty hands-off when it comes to styling, since every use-case is so different. We expect most consumers will choose to create their own custom markup with direct usage of `useValidatedInput`. However, for simple use-cases of `<Input>` we expose a handful of stateful classes on the elements you may hook into with your own custom styles:
 
 - `rvs-label` - added to the built-in `<label>` element
   - `rvs-label--touched` - present when the input has been blur'd
