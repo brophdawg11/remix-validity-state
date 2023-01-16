@@ -25,6 +25,7 @@
       - [Custom Validations](#custom-validations)
       - [Textarea and Select Elements](#textarea-and-select-elements)
       - [Radio and Checkbox Inputs](#radio-and-checkbox-inputs)
+      - [Server-only Validations](#server-only-validations)
       - [Error Messages](#error-messages)
       - [useValidatedInput()](#usevalidatedinput)
       - [Styling](#styling)
