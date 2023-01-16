@@ -10,7 +10,7 @@ import type {
   TextAreaDefinition,
 } from "remix-validity-state";
 import {
-  Field,
+  Input,
   FormProvider,
   Select,
   TextArea,
@@ -344,7 +344,7 @@ export default function Index() {
               <code>required="true" minLength="5" pattern="^[a-zA-Z]+$"</code>
             </p>
             <div className="demo-input">
-              <Field<FormSchema> name="firstName" label="First Name" />
+              <Input<FormSchema> name="firstName" label="First Name" />
             </div>
           </div>
 
@@ -356,7 +356,7 @@ export default function Index() {
               </code>
             </p>
             <div className="demo-input">
-              <Field<FormSchema> name="middleInitial" label="Middle Initial" />
+              <Input<FormSchema> name="middleInitial" label="Middle Initial" />
             </div>
           </div>
 
@@ -366,7 +366,7 @@ export default function Index() {
               <code>required="true" minLength="5" pattern="^[a-zA-Z]+$"</code>
             </p>
             <div className="demo-input">
-              <Field<FormSchema> name="lastName" label="Last Name" />
+              <Input<FormSchema> name="lastName" label="Last Name" />
             </div>
           </div>
 
@@ -392,9 +392,9 @@ export default function Index() {
               Each of these hobby inputs has <code>required="true"</code>
             </p>
             <div className="demo-input">
-              <Field<FormSchema> name="hobby" label="Hobby #1" index={0} />
-              <Field<FormSchema> name="hobby" label="Hobby #2" index={1} />
-              <Field<FormSchema> name="hobby" label="Hobby #3" index={2} />
+              <Input<FormSchema> name="hobby" label="Hobby #1" index={0} />
+              <Input<FormSchema> name="hobby" label="Hobby #2" index={1} />
+              <Input<FormSchema> name="hobby" label="Hobby #3" index={2} />
             </div>
           </div>
 
@@ -404,8 +404,8 @@ export default function Index() {
               <code>max</code> attributes based on the value of the other input
             </p>
             <div className="demo-input">
-              <Field<FormSchema> name="low" label="Low" />
-              <Field<FormSchema> name="high" label="High" />
+              <Input<FormSchema> name="low" label="Low" />
+              <Input<FormSchema> name="high" label="High" />
             </div>
           </div>
 

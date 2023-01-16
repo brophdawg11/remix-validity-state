@@ -880,13 +880,15 @@ function useValidatedControl<
 
       let validity: ExtendedValidityState;
       if (inputType === "radio" || inputType === "checkbox") {
-        let selector = `input[type="${inputType}"][name="${name}"]`;
-        console.log("validating for selector", selector);
         validity = await validateInput(
           name,
           inputDef,
           value,
-          Array.from(inputRef.current?.form?.querySelectorAll(selector) || [])
+          Array.from(
+            inputRef.current?.form?.querySelectorAll(
+              `input[type="${inputType}"][name="${name}"]`
+            ) || []
+          )
         );
       } else {
         validity = await validateInput(
@@ -1185,12 +1187,29 @@ function ControlWrapper<T extends FormDefinition>({
       ) : null}
       {children}
       {/* Display validation state */}
-      {showErrors ? <FieldErrors info={info} {...errorAttrs} /> : null}
+      {showErrors ? <ControlErrors info={info} {...errorAttrs} /> : null}
     </>
   );
 }
 
-export interface FieldProps<T extends FormDefinition>
+interface ControlErrorsProps extends React.ComponentPropsWithoutRef<"ul"> {
+  info: InputInfo;
+}
+
+function ControlErrors({ info, ...attrs }: ControlErrorsProps) {
+  if (info.state === "idle") {
+    return null;
+  }
+  if (info.state === "validating") {
+    return <p className="rvs-validating">Validating...</p>;
+  }
+  if (info.validity?.valid) {
+    return null;
+  }
+  return <Errors {...attrs} messages={info.errorMessages} />;
+}
+
+export interface InputProps<T extends FormDefinition>
   extends UseValidatedInputOpts<T>,
     Omit<React.ComponentPropsWithoutRef<"input">, "name"> {
   label: string;
@@ -1198,14 +1217,14 @@ export interface FieldProps<T extends FormDefinition>
 }
 
 // Syntactic sugar component to handle <label>/<input> and error displays
-export function Field<T extends FormDefinition>({
+export function Input<T extends FormDefinition>({
   name,
   formDefinition: formDefinitionProp,
   serverFormInfo: serverFormInfoProp,
   label,
   index,
   ...inputAttrs
-}: FieldProps<T>) {
+}: InputProps<T>) {
   let ctx = useOptionalFormContext<T>();
   let formDefinition = formDefinitionProp || ctx?.formDefinition;
   let serverFormInfo = serverFormInfoProp || ctx?.serverFormInfo;
@@ -1317,23 +1336,6 @@ export function Select<T extends FormDefinition>({
       </select>
     </ControlWrapper>
   );
-}
-
-interface FieldErrorsProps extends React.ComponentPropsWithoutRef<"ul"> {
-  info: InputInfo;
-}
-
-function FieldErrors({ info, ...attrs }: FieldErrorsProps) {
-  if (info.state === "idle") {
-    return null;
-  }
-  if (info.state === "validating") {
-    return <p className="rvs-validating">Validating...</p>;
-  }
-  if (info.validity?.valid) {
-    return null;
-  }
-  return <Errors {...attrs} messages={info.errorMessages} />;
 }
 
 export interface ErrorProps {
