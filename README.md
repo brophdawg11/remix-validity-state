@@ -221,6 +221,8 @@ export default function MyRemixRouteComponent() {
 
 You've now got a real-time client-side validated form wired up with your rock-solid server validations!
 
+Play with this complete example on [StackBlitz](https://stackblitz.com/edit/node-okmhgz?file=app%2Froutes%2Findex.tsx)
+
 ### Advanced Usages and Concepts
 
 #### `ExtendedValidityState`
