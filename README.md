@@ -74,7 +74,11 @@ Semantically correct and accessible `<form>` markup is verbose. Any convenient f
 
 ### Demo App
 
-There's a sample Remix app deployed to [rvs.fly.dev](https://rvs.fly.dev) that you can check out. This app source code is stored in this repository in the `demo-app/` folder, so you can also run it locally via:
+There's a sample Remix app deployed to [rvs.fly.dev](https://rvs.fly.dev) that you can check out. This app source code is stored in this repository in the `demo-app/` folder, so you can also open it in StackBlitz or run it locally:
+
+[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/brophdawg11/remix-validity-state/tree/main/demo-app?file=app%2Froutes%2Findex.tsx&title=remix-validity-state%20Demo%20App)
+
+To run the app locally:
 
 ```bash
 git clone git@github.com:brophdawg11/remix-validity-state.git
