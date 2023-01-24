@@ -4,7 +4,7 @@
 
 > **Warning**
 >
-> This library is still in a beta stage. It's feeling more stable these days but I can't guarantee there won't be breaking changes ahead 😀.
+> This library is still in a beta stage. It's feeling more stable these days but I can't guarantee there won't be _some_ breaking changes ahead 😀. Please read the release notes for each new version as they'll always be highlighted there.
 
 - [Remix Validity State](#remix-validity-state)
   - [Design Goals](#design-goals)
@@ -23,11 +23,12 @@
       - [Multiple Inputs with the Same Name](#multiple-inputs-with-the-same-name)
       - [Dynamic (Form-Dependent) Validation Attributes](#dynamic-form-dependent-validation-attributes)
       - [Custom Validations](#custom-validations)
-      - [Textarea and Select Elements](#textarea-and-select-elements)
-      - [Radio and Checkbox Inputs](#radio-and-checkbox-inputs)
       - [Server-only Validations](#server-only-validations)
       - [Error Messages](#error-messages)
       - [useValidatedInput()](#usevalidatedinput)
+      - [Custom `ref` usage](#custom-ref-usage)
+      - [Textarea and Select Elements](#textarea-and-select-elements)
+      - [Radio and Checkbox Inputs](#radio-and-checkbox-inputs)
       - [Styling](#styling)
       - [Typescript](#typescript)
   - [Feedback + Contributing](#feedback--contributing)
@@ -280,7 +281,7 @@ async function action({ request }) {
 
 #### Dynamic (Form-Dependent) Validation Attributes
 
-Most of the time, your built-in validation attributes will be static (`required: true` or `malength: 30` etc.). However, sometimes you need the validation attribute to be dependent on the current value of another input in the form. Consider 2 numeric inputs: `low` and `high`. If `low` has a value, then `high` sets it's `min` validation attribute to the value of `low` and vice versa:
+Most of the time, your built-in validation attributes will be static (`required: true` or `maxLength: 30` etc.). However, sometimes you need the validation attribute to be dependent on the current value of another input in the form. Consider 2 numeric inputs: `low` and `high`. If `low` has a value, then `high` sets it's `min` validation attribute to the value of `low` and vice versa:
 
 ```js
 let formDefinition: FormSchema = {
@@ -323,108 +324,6 @@ const formDefinition: FormSchema = {
         },
       }
   },
-}
-```
-
-#### Textarea and Select Elements
-
-Other control types work just like `<input>` but use a different type and are identified with an `element` prop. This allows for differentiation under the hood and proper type inference on the validation attributes allowed for different elements.
-
-```ts
-interface FormSchema {
-  inputs: {
-    biography: TextAreaDefinition;
-    country: SelectDefinition;
-  };
-}
-
-let formDefinition: FormSchema = {
-  inputs: {
-    biography: {
-      element: "textarea",
-      validationAttrs: {
-        required: true,
-        maxLength: 500,
-      },
-    },
-    country: {
-      element: "select",
-      validationAttrs: {
-        required: true,
-      },
-    },
-  },
-};
-```
-
-#### Radio and Checkbox Inputs
-
-Radio and Checkbox inputs are unique in that they generally have multiple inputs of the same name and validation is dependent upon the state of _all_ of the inputs.
-
-```ts
-interface FormSchema {
-  inputs: {
-    skills: InputDefinition;
-    favoriteFood: InputDefinition;
-  };
-}
-
-let formDefinition: FormSchema = {
-  inputs: {
-    programmingLanguages: {
-      validationAttrs: {
-        type: "checkbox",
-        required: true,
-        maxLength: 500,
-      },
-    },
-    favoriteFood: {
-      validationAttrs: {
-        type: "radio",
-        required: true,
-      },
-    },
-  },
-};
-```
-
-Because validation is across the group of them, it's not recommended to use the `<Input>` component, because that by default renders errors _per-input_. We really want them for the group of inputs. It's recommended to call `useValidatedInput` manually for these scenarios:
-
-```tsx
-function FavoriteSkill() {
-  let skills = ["React", "Vue", "Preact", "Angular", "Svelte", "Solid", "Qwik"];
-  let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } =
-    useValidatedInput<typeof formDefinition>({ name: "skills" });
-  // Since we'll share these attributes across all checkboxes we call these
-  // once here to avoid calling per-input.  And since we put the input inside
-  // the label we don't need the `for` attribute
-  let labelAttrs = getLabelAttrs({ htmlFor: undefined });
-  let inputAttrs = getInputAttrs();
-  return (
-    <fieldset>
-      <legend>Which skills do you have?</legend>
-
-      {/* Render checkboxes for each skill, making the id unique based on the skill */}
-      {skills.map((s) => (
-        <label key={s} {...labelAttrs}>
-          <input
-            {...{ ...inputAttrs, id: `${inputAttrs.id}--${s.toLowerCase()}` }}
-          />
-          &nbsp;
-          {s}
-        </label>
-      ))}
-
-      {/* Render errors once for the group of inputs */}
-      {info.touched && info.errorMessages ? (
-        <ul {...getErrorsAttrs()}>
-          {Object.entries(info.errorMessages).map(([validation, msg]) => (
-            <li key={validation}>🆘 {msg}</li>
-          ))}
-        </ul>
-      ) : null}
-    </fieldset>
-  );
 }
 ```
 
@@ -553,15 +452,18 @@ const formDefinition: FormSchema = {
 This is the bread and butter of the library - and `<Input>` is really nothing more than a wrapper around this hook. This is useful if you require more control over the direct rendering of your `input`, `label` or error elements. Let's take a look at what it gives you. The only required input is the input `name`:
 
 ```js
-let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } = useValidatedInput({
-  name: "firstName",
-});
+let { info, ref, getInputAttrs, getLabelAttrs, getErrorsAttrs } =
+  useValidatedInput({
+    name: "firstName",
+  });
 ```
 
 The returned `info` value is of the following structure:
 
 ```ts
 interface InputInfo {
+  // The current value of this input
+  value: string | null;
   // Has this input been blur'd?
   touched: boolean;
   // Has this input value changed?
@@ -613,6 +515,132 @@ let { info } = useValidatedInput({
   formDefinition,
   serverFormInfo,
 });
+```
+
+#### Custom `ref` usage
+
+Most of the time, you shouldn't need a `ref` for your `<input>` elements, since the library will take care of things under the hood for you. However, if you need one, we return the underlying `ref` from `useValidatedInput()` for consumption:
+
+```js
+let ctx = useValidatedInput({ name: "firstName" });
+// ctx.ref contains the ref
+
+// You do not need to assign the ref here, that's done via getInputAttrs
+return <input {...ctx.getInputAttrs()} />;
+```
+
+If that's not enough, you can also pass your own custom ref as an argument and it will be composed together with the internal `ref`:
+
+```js
+let ref = React.useRef(null);
+let ctx = useValidatedInput({ name: "firstName", ref });
+
+// You still do not need to assign the ref here, that's done via getInputAttrs
+return <input {...ctx.getInputAttrs()} />;
+```
+
+#### Textarea and Select Elements
+
+Other control types work just like `<input>` but use a different type and are identified with an `element` prop. This allows for differentiation under the hood and proper type inference on the validation attributes allowed for different elements.
+
+```ts
+interface FormSchema {
+  inputs: {
+    biography: TextAreaDefinition;
+    country: SelectDefinition;
+  };
+}
+
+let formDefinition: FormSchema = {
+  inputs: {
+    biography: {
+      element: "textarea",
+      validationAttrs: {
+        required: true,
+        maxLength: 500,
+      },
+    },
+    country: {
+      element: "select",
+      validationAttrs: {
+        required: true,
+      },
+    },
+  },
+};
+```
+
+#### Radio and Checkbox Inputs
+
+Radio and Checkbox inputs are unique in that they generally have multiple inputs of the same name and validation is dependent upon the state of _all_ of the inputs.
+
+```ts
+interface FormSchema {
+  inputs: {
+    skills: InputDefinition;
+    favoriteFood: InputDefinition;
+  };
+}
+
+let formDefinition: FormSchema = {
+  inputs: {
+    programmingLanguages: {
+      validationAttrs: {
+        type: "checkbox",
+        required: true,
+        maxLength: 500,
+      },
+    },
+    favoriteFood: {
+      validationAttrs: {
+        type: "radio",
+        required: true,
+      },
+    },
+  },
+};
+```
+
+Because validation is across the group of them, it's not recommended to use the `<Input>` component, because that by default renders errors _per-input_. We really want them for the group of inputs. It's recommended to call [`useValidatedInput()`](#usevalidatedinput) manually for these scenarios:
+
+```tsx
+function FavoriteSkill() {
+  let skills = ["React", "Vue", "Preact", "Angular", "Svelte", "Solid", "Qwik"];
+  let { info, getInputAttrs, getLabelAttrs, getErrorsAttrs } =
+    useValidatedInput<typeof formDefinition>({ name: "skills" });
+
+  // Since we'll share these attributes across all checkboxes we call these
+  // once here to avoid calling per-input.  And since we put the input inside
+  // the label we don't need the `for` attribute
+  let labelAttrs = getLabelAttrs({ htmlFor: undefined });
+  let inputAttrs = getInputAttrs();
+
+  return (
+    <fieldset>
+      <legend>Which skills do you have?</legend>
+
+      {/* Render checkboxes for each skill, making the id unique based on the skill */}
+      {skills.map((s) => (
+        <label key={s} {...labelAttrs}>
+          <input
+            {...{ ...inputAttrs, id: `${inputAttrs.id}--${s.toLowerCase()}` }}
+          />
+          &nbsp;
+          {s}
+        </label>
+      ))}
+
+      {/* Render errors once for the group of inputs */}
+      {info.touched && info.errorMessages ? (
+        <ul {...getErrorsAttrs()}>
+          {Object.entries(info.errorMessages).map(([validation, msg]) => (
+            <li key={validation}>🆘 {msg}</li>
+          ))}
+        </ul>
+      ) : null}
+    </fieldset>
+  );
+}
 ```
 
 #### Styling
