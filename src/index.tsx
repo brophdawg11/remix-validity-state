@@ -229,6 +229,13 @@ const builtInValidityToAttrMapping: Record<
   patternMismatch: "pattern",
 };
 
+// Directly from the spec - please do not file issues or submit PRs to change
+// this unless it becomes out of sync with the spec.
+// https://html.spec.whatwg.org/multipage/input.html#valid-e-mail-address
+const EMAIL_REGEX =
+  // eslint-disable-next-line no-useless-escape
+  /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+
 // Mimic browser built-in validations so we can run the on the server
 const builtInValidations: Record<
   KeyOf<BuiltInValidationAttrs>,
@@ -236,8 +243,37 @@ const builtInValidations: Record<
 > = {
   type: {
     domKey: "typeMismatch",
-    validate: (): boolean => {
-      // Not re-implementing the built-in browser type validations :)
+    validate: (value, attrValue): boolean => {
+      if (value.length === 0) {
+        return true;
+      }
+
+      if (attrValue === "email") {
+        return EMAIL_REGEX.test(value);
+      }
+
+      if (attrValue === "url") {
+        try {
+          // URL is available globally in node and most server-worker-API based
+          // environments.  If URL is not available globally in your runtime
+          // you'll need to polyfill it
+
+          // Note - this is fairly lenient but seems to match browser behavior.
+          // For example, http:/something passes and the resulting url.href is
+          // normalized to http://something.  It's tempting to do something like
+          // `return new URL(value).href === value` to make sure the incoming URL
+          // doesn't require normalization but that seems to deviate from built-in
+          // browser behavior.  Plus then we need to deal with normalized trailing
+          // slashes and such as well.  Unsure how deep that rabbit hole might go
+          // so this is fine for now.
+          new URL(value);
+        } catch (e) {
+          return false;
+        }
+      }
+
+      // email/url are the only types with intrinsic constraints
+      // https://developer.mozilla.org/en-US/docs/Web/HTML/Constraint_validation#semantic_input_types
       return true;
     },
     errorMessage: (attrValue) => {
