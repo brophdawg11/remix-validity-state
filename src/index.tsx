@@ -232,8 +232,8 @@ const builtInValidityToAttrMapping: Record<
 // Directly from the spec - please do not file issues or submit PRs to change
 // this unless it becomes out of sync with the spec.
 // https://html.spec.whatwg.org/multipage/input.html#valid-e-mail-address
-// eslint-disable-next-line no-useless-escape
 const EMAIL_REGEX =
+  // eslint-disable-next-line no-useless-escape
   /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
 
 // Mimic browser built-in validations so we can run the on the server
