@@ -169,6 +169,7 @@ export type AsyncValidationState = "idle" | "validating" | "done";
  * Client-side state of the input
  */
 export interface InputInfo {
+  value: string | null;
   touched: boolean;
   dirty: boolean;
   state: AsyncValidationState;
@@ -455,6 +456,7 @@ export async function validateServerFormData<T extends FormDefinition>(
           if (typeof value === "string") {
             // Always assume inputs have been modified during SSR validation
             let inputInfo: InputInfo = {
+              value,
               touched: true,
               dirty: true,
               state: "done",
@@ -487,6 +489,7 @@ export async function validateServerFormData<T extends FormDefinition>(
         }
       } else {
         let inputInfo: InputInfo = {
+          value: null,
           touched: true,
           dirty: true,
           state: "done",
@@ -749,18 +752,17 @@ function useValidatedControl<
   let name = opts.name;
   let formDefinition = opts.formDefinition || ctx?.formDefinition;
   let forceUpdate = opts.forceUpdate || ctx?.forceUpdate;
-
   invariant(
     formDefinition,
-    "useValidatedInput() must either be used inside a <FormProvider> " +
+    "useValidatedControl() must either be used inside a <FormProvider> " +
       "or be passed a `formDefinition` object"
   );
 
   let inputDef = formDefinition.inputs[name];
-
   invariant(
     inputDef,
-    `useValidatedInput() could not find a corresponding definition for the "${name}" input`
+    `useValidatedControl() could not find a corresponding definition ` +
+      `for the "${name}" input`
   );
 
   let serverFormInfo = opts.serverFormInfo || ctx?.serverFormInfo;
@@ -986,6 +988,7 @@ function useValidatedControl<
   ]);
 
   let info: InputInfo = {
+    value,
     dirty,
     touched,
     state: validationState,
@@ -1023,6 +1026,7 @@ function useValidatedControl<
     name,
     id,
     validationAttrs: currentValidationAttrs,
+    ref: inputRef,
     composedRef,
     info,
     serverFormInfo,
@@ -1068,6 +1072,7 @@ export function useValidatedInput<T extends FormDefinition>(
 
   return {
     info: ctx.info,
+    ref: ctx.ref,
     controller: ctx.controller,
     getLabelAttrs: ctx.getLabelAttrs,
     getErrorsAttrs: ctx.getErrorsAttrs,
@@ -1111,6 +1116,7 @@ export function useValidatedTextArea<T extends FormDefinition>(
 
   return {
     info: ctx.info,
+    ref: ctx.ref,
     controller: ctx.controller,
     getLabelAttrs: ctx.getLabelAttrs,
     getErrorsAttrs: ctx.getErrorsAttrs,
@@ -1154,6 +1160,7 @@ export function useValidatedSelect<T extends FormDefinition>(
 
   return {
     info: ctx.info,
+    ref: ctx.ref,
     controller: ctx.controller,
     getLabelAttrs: ctx.getLabelAttrs,
     getErrorsAttrs: ctx.getErrorsAttrs,
