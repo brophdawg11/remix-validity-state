@@ -1165,7 +1165,7 @@ export interface FormProviderProps<
   T extends FormDefinition
 > extends React.PropsWithChildren<{
     formDefinition: T;
-    serverFormInfo: ServerFormInfo<T>;
+    serverFormInfo?: ServerFormInfo<T>;
     formRef?: React.RefObject<HTMLFormElement>;
   }> {}
 
