@@ -244,8 +244,12 @@ const builtInValidations: Record<
   type: {
     domKey: "typeMismatch",
     validate: (value, attrValue): boolean => {
+      if (value.length === 0) {
+        return true;
+      }
+
       if (attrValue === "email") {
-        return value.length === 0 || EMAIL_REGEX.test(value);
+        return EMAIL_REGEX.test(value);
       }
 
       if (attrValue === "url") {
