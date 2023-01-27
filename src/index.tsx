@@ -39,12 +39,14 @@ interface BuiltInValidationAttrs {
 // Valid attributes by input type.  See:
 // https://html.spec.whatwg.org/multipage/input.html#do-not-apply
 
-type InputTextValidationAttrs = {
-  type?: "text" | "search" | "url" | "tel" | "email" | "password";
-} & Pick<
-  BuiltInValidationAttrs,
-  "required" | "minLength" | "maxLength" | "pattern"
->;
+type InputTextValidationAttrs = (
+  | { type?: "text" | "search" | "url" | "tel" | "password" }
+  | { type: "email"; multiple?: boolean }
+) &
+  Pick<
+    BuiltInValidationAttrs,
+    "required" | "minLength" | "maxLength" | "pattern"
+  >;
 
 type InputDateValidationAttrs = {
   type: "date" | "month" | "week" | "time" | "datetime-local";
@@ -71,7 +73,9 @@ type TextAreaValidationAttrs = Pick<
   "required" | "minLength" | "maxLength"
 >;
 
-type SelectValidationAttrs = Pick<BuiltInValidationAttrs, "required">;
+type SelectValidationAttrs = {
+  multiple?: boolean;
+} & Pick<BuiltInValidationAttrs, "required">;
 
 type InputValidationAttrs =
   | InputTextValidationAttrs
@@ -119,6 +123,7 @@ interface BaseControlDefinition {
   errorMessages?: {
     [key: string]: ErrorMessage;
   };
+  multiple?: boolean;
 }
 
 export interface InputDefinition extends BaseControlDefinition {
@@ -182,9 +187,46 @@ export type ServerOnlyCustomValidations<T extends FormDefinition> = Partial<{
 }>;
 
 // Server-side only (currently) - validate all specified inputs in the formData
-export type ServerFormInfo<T extends FormDefinition> = {
-  submittedValues: Record<KeyOf<T["inputs"]>, string | string[] | null>;
-  inputs: Record<KeyOf<T["inputs"]>, InputInfo | InputInfo[]>;
+export type ServerFormInfo<
+  FormDef extends FormDefinition,
+  FormDefInputs extends FormDef["inputs"] = FormDef["inputs"]
+> = {
+  submittedValues: {
+    [Key in KeyOf<FormDefInputs>]: FormDefInputs[Key]["element"] extends "textarea"
+      ? FormDefInputs[Key]["multiple"] extends true
+        ? string[]
+        : string
+      : FormDefInputs[Key]["element"] extends "select"
+      ? FormDefInputs[Key]["multiple"] extends true
+        ? string[]
+        : FormDefInputs[Key] extends { validationAttrs: object }
+        ? FormDefInputs[Key]["validationAttrs"] extends { multiple: true }
+          ? string[]
+          : string
+        : string
+      : FormDefInputs[Key] extends { validationAttrs: object }
+      ? FormDefInputs[Key]["validationAttrs"] extends { type: "checkbox" }
+        ? FormDefInputs[Key]["validationAttrs"] extends { required: true }
+          ? FormDefInputs[Key]["multiple"] extends true
+            ? string[]
+            : string
+          : FormDefInputs[Key]["multiple"] extends true
+          ? string[] | null
+          : string | null
+        : FormDefInputs[Key]["validationAttrs"] extends { type: "email" }
+        ? FormDefInputs[Key]["multiple"] extends true
+          ? string[]
+          : FormDefInputs[Key]["validationAttrs"] extends { multiple: true }
+          ? string[]
+          : string
+        : FormDefInputs[Key]["multiple"] extends true
+        ? string[]
+        : string
+      : FormDefInputs[Key]["multiple"] extends true
+      ? string[]
+      : string;
+  };
+  inputs: Record<KeyOf<FormDefInputs>, InputInfo | InputInfo[]>;
   valid: boolean;
 };
 
