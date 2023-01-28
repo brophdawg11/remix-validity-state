@@ -1,0 +1,45 @@
+name: ⚙️ Validate
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⬇️ Checkout repo
+        uses: actions/checkout@v3
+
+      - name: ⎔ Setup node
+        uses: actions/setup-node@v3
+        with:
+          cache: "npm"
+          node-version-file: "package.json"
+
+      - name: 📥 Install deps
+        run: npm ci
+
+      - name: ✅ Lint
+        run: npm run lint
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⬇️ Checkout repo
+        uses: actions/checkout@v3
+
+      - name: ⎔ Setup node
+        uses: actions/setup-node@v3
+        with:
+          cache: "npm"
+          node-version-file: "package.json"
+
+      - name: 📥 Install deps
+        run: npm ci
+
+      - name: 🏗 Build
+        run: npm run build

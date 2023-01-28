@@ -11,6 +11,9 @@
     "dist/"
   ],
   "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/brophdawg11/remix-validity-state.git"
