@@ -32,6 +32,7 @@
     "build": "rollup -c ./rollup.config.js",
     "clean": "rm -rf dist/",
     "dev": "OUTPUT_DIR=demo-app/node_modules/remix-validity-state npm run build -- --watch",
+    "format": "prettier --ignore-path .eslintignore --write ./ && npm run lint -- --fix",
     "lint": "eslint --ext .js,.ts,.tsx .",
     "prepublishOnly": "npm run clean && npm run build",
     "test": "npm run test"
