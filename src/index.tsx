@@ -896,7 +896,12 @@ function useValidatedControl<
     wasSubmitted = true;
     let submittedValue = serverFormInfo.submittedValues[name];
     let inputInfo = serverFormInfo.inputs[name];
-    if (Array.isArray(inputInfo) || Array.isArray(submittedValue)) {
+    if (
+      (inputDef.element == null || inputDef.element === "input") &&
+      inputDef.validationAttrs?.type === "checkbox"
+    ) {
+      // Checkboxes aren't re-populated like others at the moment :/
+    } else if (Array.isArray(inputInfo) || Array.isArray(submittedValue)) {
       invariant(
         Array.isArray(inputInfo) && Array.isArray(submittedValue),
         `Incompatible serverFormInfo structure for field "${name}"`
