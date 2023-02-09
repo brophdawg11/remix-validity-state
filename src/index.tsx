@@ -208,9 +208,7 @@ export type ServerFormInfo<
       ? FormDefInputs[Key]["validationAttrs"] extends { type: "checkbox" }
         ? FormDefInputs[Key]["validationAttrs"] extends { required: true }
           ? string[]
-          : FormDefInputs[Key]["multiple"] extends true
-          ? string[] | null
-          : string | null
+          : string[] | null
         : FormDefInputs[Key]["validationAttrs"] extends { type: "email" }
         ? FormDefInputs[Key]["multiple"] extends true
           ? string[]
