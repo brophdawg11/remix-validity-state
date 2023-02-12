@@ -2,8 +2,8 @@ import type {
   InputDefinition,
   SelectDefinition,
   TextAreaDefinition,
-} from "../../../src";
-import { validateServerFormData } from "../../../src";
+} from "../../src";
+import { validateServerFormData } from "../../src";
 import type { ActionArgs } from "@remix-run/node";
 
 type FormSchema = {
@@ -11,8 +11,8 @@ type FormSchema = {
     a: TextAreaDefinition;
     b: TextAreaDefinition;
     c: TextAreaDefinition;
+    d: TextAreaDefinition;
 
-    d: SelectDefinition;
     e: SelectDefinition;
     f: SelectDefinition;
     g: SelectDefinition;
@@ -27,20 +27,19 @@ type FormSchema = {
     p: SelectDefinition;
     q: SelectDefinition;
     r: SelectDefinition;
+    s: SelectDefinition;
+    t: SelectDefinition;
+    u: SelectDefinition;
+    v: SelectDefinition;
+    w: SelectDefinition;
+    x: SelectDefinition;
+    y: SelectDefinition;
+    z: SelectDefinition;
+    aa: SelectDefinition;
 
-    s: InputDefinition;
-    t: InputDefinition;
-    u: InputDefinition;
-    v: InputDefinition;
-    w: InputDefinition;
-    x: InputDefinition;
-    y: InputDefinition;
-    z: InputDefinition;
-    aa: InputDefinition;
     ab: InputDefinition;
     ac: InputDefinition;
     ad: InputDefinition;
-
     ae: InputDefinition;
     af: InputDefinition;
     ag: InputDefinition;
@@ -60,7 +59,6 @@ type FormSchema = {
     at: InputDefinition;
     au: InputDefinition;
     av: InputDefinition;
-
     aw: InputDefinition;
     ax: InputDefinition;
     ay: InputDefinition;
@@ -68,12 +66,12 @@ type FormSchema = {
     ba: InputDefinition;
     bb: InputDefinition;
     bc: InputDefinition;
+
     bd: InputDefinition;
     be: InputDefinition;
     bf: InputDefinition;
     bg: InputDefinition;
     bh: InputDefinition;
-
     bi: InputDefinition;
     bj: InputDefinition;
     bk: InputDefinition;
@@ -83,8 +81,8 @@ type FormSchema = {
     bo: InputDefinition;
     bp: InputDefinition;
     bq: InputDefinition;
-
     br: InputDefinition;
+
     bs: InputDefinition;
     bt: InputDefinition;
     bu: InputDefinition;
@@ -93,6 +91,43 @@ type FormSchema = {
     bx: InputDefinition;
     by: InputDefinition;
     bz: InputDefinition;
+    ca: InputDefinition;
+    cb: InputDefinition;
+    cc: InputDefinition;
+    cd: InputDefinition;
+
+    ce: InputDefinition;
+    cf: InputDefinition;
+    cg: InputDefinition;
+    ch: InputDefinition;
+    ci: InputDefinition;
+    cj: InputDefinition;
+    ck: InputDefinition;
+    cl: InputDefinition;
+    cm: InputDefinition;
+    cn: InputDefinition;
+    co: InputDefinition;
+    cp: InputDefinition;
+    cq: InputDefinition;
+    cr: InputDefinition;
+    cs: InputDefinition;
+    ct: InputDefinition;
+
+    cu: InputDefinition;
+    cv: InputDefinition;
+    cw: InputDefinition;
+    cx: InputDefinition;
+    cy: InputDefinition;
+    cz: InputDefinition;
+    da: InputDefinition;
+    db: InputDefinition;
+    dc: InputDefinition;
+    dd: InputDefinition;
+    de: InputDefinition;
+    df: InputDefinition;
+    dg: InputDefinition;
+    dh: InputDefinition;
+    di: InputDefinition;
   };
 };
 
@@ -100,190 +135,318 @@ const formDefinition = {
   inputs: {
     a: { element: "textarea" }, // string
     b: { element: "textarea", multiple: undefined }, // string
-    c: { element: "textarea", multiple: true }, // string[]
+    c: { element: "textarea", multiple: false }, // string
+    d: { element: "textarea", multiple: true }, // string[]
 
-    d: { element: "select" }, // string
-    e: { element: "select", multiple: undefined }, // string
-    f: { element: "select", multiple: true }, // string[]
-    g: { element: "select", validationAttrs: undefined }, // string
-    h: { element: "select", multiple: undefined, validationAttrs: undefined }, // string
-    i: { element: "select", multiple: true, validationAttrs: undefined }, // string[]
-    j: { element: "select", validationAttrs: {} }, // string
-    k: { element: "select", multiple: undefined, validationAttrs: {} }, // string
-    l: { element: "select", multiple: true, validationAttrs: {} }, // string[]
-    m: { element: "select", validationAttrs: { multiple: undefined } }, // string
-    n: {
+    e: { element: "select" }, // string
+    f: { element: "select", multiple: undefined }, // string
+    g: { element: "select", multiple: false }, // string
+    h: { element: "select", multiple: true }, // string[]
+    i: { element: "select", validationAttrs: undefined }, // string
+    j: { element: "select", multiple: undefined, validationAttrs: undefined }, // string
+    k: { element: "select", multiple: false, validationAttrs: undefined }, // string
+    l: { element: "select", multiple: true, validationAttrs: undefined }, // string[]
+    m: { element: "select", validationAttrs: {} }, // string
+    n: { element: "select", multiple: undefined, validationAttrs: {} }, // string
+    o: { element: "select", multiple: false, validationAttrs: {} }, // string
+    p: { element: "select", multiple: true, validationAttrs: {} }, // string[]
+    q: { element: "select", validationAttrs: { multiple: undefined } }, // string
+    r: { element: "select", validationAttrs: { multiple: false } }, // string
+    s: {
       element: "select",
       multiple: undefined,
       validationAttrs: { multiple: undefined },
     }, // string
-    o: {
+    t: {
+      element: "select",
+      multiple: undefined,
+      validationAttrs: { multiple: false },
+    }, // string
+    u: {
+      element: "select",
+      multiple: false,
+      validationAttrs: { multiple: undefined },
+    }, // string
+    v: {
+      element: "select",
+      multiple: false,
+      validationAttrs: { multiple: false },
+    }, // string
+    w: {
       element: "select",
       multiple: true,
       validationAttrs: { multiple: undefined },
     }, // string[]
-    p: { element: "select", validationAttrs: { multiple: true } }, // string[]
-    q: {
+    x: { element: "select", validationAttrs: { multiple: true } }, // string[]
+    y: {
       element: "select",
       multiple: undefined,
       validationAttrs: { multiple: true },
     }, // string[]
-    r: {
+    z: {
+      element: "select",
+      multiple: false,
+      validationAttrs: { multiple: true },
+    }, // string[]
+    aa: {
       element: "select",
       multiple: true,
       validationAttrs: { multiple: true },
     }, // string[]
 
-    s: {}, // string
-    t: { multiple: undefined }, // string
-    u: { multiple: true }, // string[]
-    v: { validationAttrs: undefined }, // string
-    w: { multiple: undefined, validationAttrs: undefined }, // string
-    x: { multiple: true, validationAttrs: undefined }, // string[]
-    y: { validationAttrs: {} }, // string
-    z: { multiple: undefined, validationAttrs: {} }, // string
-    aa: { multiple: true, validationAttrs: {} }, // string[]
-    ab: { validationAttrs: { type: undefined } }, // string
-    ac: { multiple: undefined, validationAttrs: { type: undefined } }, // string
-    ad: { multiple: true, validationAttrs: { type: undefined } }, // string[]
+    ab: {}, // string
+    ac: { multiple: undefined }, // string
+    ad: { multiple: true }, // string[]
+    ae: { validationAttrs: undefined }, // string
+    af: { multiple: undefined, validationAttrs: undefined }, // string
+    ag: { multiple: true, validationAttrs: undefined }, // string[]
+    ah: { validationAttrs: {} }, // string
+    ai: { multiple: undefined, validationAttrs: {} }, // string
+    aj: { multiple: true, validationAttrs: {} }, // string[]
+    ak: { validationAttrs: { type: undefined } }, // string
+    al: { multiple: undefined, validationAttrs: { type: undefined } }, // string
+    am: { multiple: true, validationAttrs: { type: undefined } }, // string[]
 
-    ae: { validationAttrs: { type: "checkbox" } }, // string[] | null
-    af: { multiple: undefined, validationAttrs: { type: "checkbox" } }, // string[] | null
-    ag: { multiple: true, validationAttrs: { type: "checkbox" } }, // string[] | null
-    ah: { validationAttrs: { type: "checkbox", required: undefined } }, // string[] | null
-    ai: {
+    an: { validationAttrs: { type: "checkbox" } }, // string[] | null
+    ao: { multiple: undefined, validationAttrs: { type: "checkbox" } }, // string[] | null
+    ap: { multiple: false, validationAttrs: { type: "checkbox" } }, // string[] | null
+    aq: { multiple: true, validationAttrs: { type: "checkbox" } }, // string[] | null
+    ar: { validationAttrs: { type: "checkbox", required: undefined } }, // string[] | null
+    as: { validationAttrs: { type: "checkbox", required: false } }, // string[] | null
+    at: {
       multiple: undefined,
       validationAttrs: { type: "checkbox", required: undefined },
     }, // string[] | null
-    aj: {
-      multiple: true,
-      validationAttrs: { type: "checkbox", required: undefined },
-    }, // string[] | null
-    ak: { validationAttrs: { type: "checkbox", required: true } }, // string[]
-    al: {
-      multiple: undefined,
-      validationAttrs: { type: "checkbox", required: true },
-    }, // string[]
-    am: {
-      multiple: true,
-      validationAttrs: { type: "checkbox", required: true },
-    }, // string[]
-
-    an: { validationAttrs: { type: "email" } }, // string
-    ao: { multiple: undefined, validationAttrs: { type: "email" } }, // string
-    ap: { multiple: true, validationAttrs: { type: "email" } }, // string[]
-    aq: { validationAttrs: { type: "email", multiple: undefined } }, // string
-    ar: {
-      multiple: undefined,
-      validationAttrs: { type: "email", multiple: undefined },
-    }, // string
-    as: {
-      multiple: true,
-      validationAttrs: { type: "email", multiple: undefined },
-    }, // string[]
-    at: { validationAttrs: { type: "email", multiple: true } }, // string[]
     au: {
       multiple: undefined,
-      validationAttrs: { type: "email", multiple: true },
-    }, // string[]
-    av: { multiple: true, validationAttrs: { type: "email", multiple: true } }, // string[]
-
-    aw: { element: "input" }, // string
-    ax: { element: "input", multiple: undefined }, // string
-    ay: { element: "input", multiple: true }, // string[]
-    az: { element: "input", validationAttrs: undefined }, // string
-    ba: { element: "input", multiple: undefined, validationAttrs: undefined }, // string
-    bb: { element: "input", multiple: true, validationAttrs: undefined }, // string[]
-    bc: { element: "input", validationAttrs: {} }, // string
-    bd: { element: "input", multiple: undefined, validationAttrs: {} }, // string
-    be: { element: "input", multiple: true, validationAttrs: {} }, // string[]
-    bf: { element: "input", validationAttrs: { type: undefined } }, // string
-    bg: {
-      element: "input",
-      multiple: undefined,
-      validationAttrs: { type: undefined },
-    }, // string
-    bh: {
-      element: "input",
+      validationAttrs: { type: "checkbox", required: false },
+    }, // string[] | null
+    av: {
+      multiple: false,
+      validationAttrs: { type: "checkbox", required: undefined },
+    }, // string[] | null
+    aw: {
+      multiple: false,
+      validationAttrs: { type: "checkbox", required: false },
+    }, // string[] | null
+    ax: {
       multiple: true,
-      validationAttrs: { type: undefined },
+      validationAttrs: { type: "checkbox", required: undefined },
+    }, // string[] | null
+    ay: {
+      multiple: true,
+      validationAttrs: { type: "checkbox", required: false },
+    }, // string[] | null
+    az: { validationAttrs: { type: "checkbox", required: true } }, // string[]
+    ba: {
+      multiple: undefined,
+      validationAttrs: { type: "checkbox", required: true },
+    }, // string[]
+    bb: {
+      multiple: false,
+      validationAttrs: { type: "checkbox", required: true },
+    }, // string[]
+    bc: {
+      multiple: true,
+      validationAttrs: { type: "checkbox", required: true },
     }, // string[]
 
-    bi: { element: "input", validationAttrs: { type: "checkbox" } }, // string[] | null
+    bd: { validationAttrs: { type: "email" } }, // string
+    be: { multiple: undefined, validationAttrs: { type: "email" } }, // string
+    bf: { multiple: false, validationAttrs: { type: "email" } }, // string
+    bg: { multiple: true, validationAttrs: { type: "email" } }, // string[]
+    bh: { validationAttrs: { type: "email", multiple: undefined } }, // string
+    bi: { validationAttrs: { type: "email", multiple: false } }, // string
     bj: {
-      element: "input",
       multiple: undefined,
-      validationAttrs: { type: "checkbox" },
-    }, // string[] | null
+      validationAttrs: { type: "email", multiple: undefined },
+    }, // string
     bk: {
-      element: "input",
-      multiple: true,
-      validationAttrs: { type: "checkbox" },
-    }, // string[] | null
+      multiple: undefined,
+      validationAttrs: { type: "email", multiple: false },
+    }, // string
     bl: {
-      element: "input",
-      validationAttrs: { type: "checkbox", required: undefined },
-    }, // string[] | null
+      multiple: false,
+      validationAttrs: { type: "email", multiple: undefined },
+    }, // string
     bm: {
-      element: "input",
-      multiple: undefined,
-      validationAttrs: { type: "checkbox", required: undefined },
-    }, // string[] | null
+      multiple: false,
+      validationAttrs: { type: "email", multiple: false },
+    }, // string
     bn: {
-      element: "input",
       multiple: true,
-      validationAttrs: { type: "checkbox", required: undefined },
-    }, // string[] | null
-    bo: {
-      element: "input",
-      validationAttrs: { type: "checkbox", required: true },
+      validationAttrs: { type: "email", multiple: undefined },
     }, // string[]
+    bo: { validationAttrs: { type: "email", multiple: true } }, // string[]
     bp: {
-      element: "input",
       multiple: undefined,
-      validationAttrs: { type: "checkbox", required: true },
+      validationAttrs: { type: "email", multiple: true },
     }, // string[]
     bq: {
+      multiple: false,
+      validationAttrs: { type: "email", multiple: true },
+    }, // string[]
+    br: { multiple: true, validationAttrs: { type: "email", multiple: true } }, // string[]
+
+    bs: { element: "input" }, // string
+    bt: { element: "input", multiple: undefined }, // string
+    bu: { element: "input", multiple: true }, // string[]
+    bv: { element: "input", validationAttrs: undefined }, // string
+    bw: { element: "input", multiple: undefined, validationAttrs: undefined }, // string
+    bx: { element: "input", multiple: true, validationAttrs: undefined }, // string[]
+    by: { element: "input", validationAttrs: {} }, // string
+    bz: { element: "input", multiple: undefined, validationAttrs: {} }, // string
+    ca: { element: "input", multiple: true, validationAttrs: {} }, // string[]
+    cb: { element: "input", validationAttrs: { type: undefined } }, // string
+    cc: {
+      element: "input",
+      multiple: undefined,
+      validationAttrs: { type: undefined },
+    }, // string
+    cd: {
+      element: "input",
+      multiple: true,
+      validationAttrs: { type: undefined },
+    }, // string[]
+
+    ce: { element: "input", validationAttrs: { type: "checkbox" } }, // string[] | null
+    cf: {
+      element: "input",
+      multiple: undefined,
+      validationAttrs: { type: "checkbox" },
+    }, // string[] | null
+    cg: {
+      element: "input",
+      multiple: false,
+      validationAttrs: { type: "checkbox" },
+    }, // string[] | null
+    ch: {
+      element: "input",
+      multiple: true,
+      validationAttrs: { type: "checkbox" },
+    }, // string[] | null
+    ci: {
+      element: "input",
+      validationAttrs: { type: "checkbox", required: undefined },
+    }, // string[] | null
+    cj: {
+      element: "input",
+      validationAttrs: { type: "checkbox", required: false },
+    }, // string[] | null
+    ck: {
+      element: "input",
+      multiple: undefined,
+      validationAttrs: { type: "checkbox", required: undefined },
+    }, // string[] | null
+    cl: {
+      element: "input",
+      multiple: undefined,
+      validationAttrs: { type: "checkbox", required: false },
+    }, // string[] | null
+    cm: {
+      element: "input",
+      multiple: false,
+      validationAttrs: { type: "checkbox", required: undefined },
+    }, // string[] | null
+    cn: {
+      element: "input",
+      multiple: false,
+      validationAttrs: { type: "checkbox", required: false },
+    }, // string[] | null
+    co: {
+      element: "input",
+      multiple: true,
+      validationAttrs: { type: "checkbox", required: undefined },
+    }, // string[] | null
+    cp: {
+      element: "input",
+      multiple: true,
+      validationAttrs: { type: "checkbox", required: false },
+    }, // string[] | null
+    cq: {
+      element: "input",
+      validationAttrs: { type: "checkbox", required: true },
+    }, // string[]
+    cr: {
+      element: "input",
+      multiple: undefined,
+      validationAttrs: { type: "checkbox", required: true },
+    }, // string[]
+    cs: {
+      element: "input",
+      multiple: false,
+      validationAttrs: { type: "checkbox", required: true },
+    }, // string[]
+    ct: {
       element: "input",
       multiple: true,
       validationAttrs: { type: "checkbox", required: true },
     }, // string[]
 
-    br: { element: "input", validationAttrs: { type: "email" } }, // string
-    bs: {
+    cu: { element: "input", validationAttrs: { type: "email" } }, // string
+    cv: {
       element: "input",
       multiple: undefined,
       validationAttrs: { type: "email" },
     }, // string
-    bt: {
+    cw: {
+      element: "input",
+      multiple: false,
+      validationAttrs: { type: "email" },
+    }, // string
+    cx: {
       element: "input",
       multiple: true,
       validationAttrs: { type: "email" },
     }, // string[]
-    bu: {
+    cy: {
       element: "input",
       validationAttrs: { type: "email", multiple: undefined },
     }, // string
-    bv: {
+    cz: {
+      element: "input",
+      validationAttrs: { type: "email", multiple: false },
+    }, // string
+    da: {
       element: "input",
       multiple: undefined,
       validationAttrs: { type: "email", multiple: undefined },
     }, // string
-    bw: {
+    db: {
+      element: "input",
+      multiple: undefined,
+      validationAttrs: { type: "email", multiple: false },
+    }, // string
+    dc: {
+      element: "input",
+      multiple: false,
+      validationAttrs: { type: "email", multiple: undefined },
+    }, // string
+    dd: {
+      element: "input",
+      multiple: false,
+      validationAttrs: { type: "email", multiple: false },
+    }, // string
+    de: {
       element: "input",
       multiple: true,
       validationAttrs: { type: "email", multiple: undefined },
     }, // string[]
-    bx: {
+    df: {
       element: "input",
       validationAttrs: { type: "email", multiple: true },
     }, // string[]
-    by: {
+    dg: {
       element: "input",
       multiple: undefined,
       validationAttrs: { type: "email", multiple: true },
     }, // string[]
-    bz: {
+    dh: {
+      element: "input",
+      multiple: false,
+      validationAttrs: { type: "email", multiple: true },
+    }, // string[]
+    di: {
       element: "input",
       multiple: true,
       validationAttrs: { type: "email", multiple: true },
@@ -300,89 +463,124 @@ export const action = async ({ request }: ActionArgs) => {
   type Expected = {
     a: string;
     b: string;
-    c: string[];
+    c: string;
+    d: string[];
 
-    d: string;
     e: string;
-    f: string[];
+    f: string;
     g: string;
-    h: string;
-    i: string[];
+    h: string[];
+    i: string;
     j: string;
     k: string;
     l: string[];
     m: string;
     n: string;
-    o: string[];
+    o: string;
     p: string[];
-    q: string[];
-    r: string[];
-
+    q: string;
+    r: string;
     s: string;
     t: string;
-    u: string[];
+    u: string;
     v: string;
-    w: string;
+    w: string[];
     x: string[];
-    y: string;
-    z: string;
+    y: string[];
+    z: string[];
     aa: string[];
+
     ab: string;
     ac: string;
     ad: string[];
-
-    ae: string[] | null;
-    af: string[] | null;
-    ag: string[] | null;
-    ah: string[] | null;
-    ai: string[] | null;
-    aj: string[] | null;
-    ak: string[];
-    al: string[];
+    ae: string;
+    af: string;
+    ag: string[];
+    ah: string;
+    ai: string;
+    aj: string[];
+    ak: string;
+    al: string;
     am: string[];
 
-    an: string;
-    ao: string;
-    ap: string[];
-    aq: string;
-    ar: string;
-    as: string[];
-    at: string[];
-    au: string[];
-    av: string[];
-
-    aw: string;
-    ax: string;
-    ay: string[];
-    az: string;
-    ba: string;
+    an: string[] | null;
+    ao: string[] | null;
+    ap: string[] | null;
+    aq: string[] | null;
+    ar: string[] | null;
+    as: string[] | null;
+    at: string[] | null;
+    au: string[] | null;
+    av: string[] | null;
+    aw: string[] | null;
+    ax: string[] | null;
+    ay: string[] | null;
+    az: string[];
+    ba: string[];
     bb: string[];
-    bc: string;
-    bd: string;
-    be: string[];
-    bf: string;
-    bg: string;
-    bh: string[];
+    bc: string[];
 
-    bi: string[] | null;
-    bj: string[] | null;
-    bk: string[] | null;
-    bl: string[] | null;
-    bm: string[] | null;
-    bn: string[] | null;
+    bd: string;
+    be: string;
+    bf: string;
+    bg: string[];
+    bh: string;
+    bi: string;
+    bj: string;
+    bk: string;
+    bl: string;
+    bm: string;
+    bn: string[];
     bo: string[];
     bp: string[];
     bq: string[];
+    br: string[];
 
-    br: string;
     bs: string;
-    bt: string[];
-    bu: string;
+    bt: string;
+    bu: string[];
     bv: string;
-    bw: string[];
+    bw: string;
     bx: string[];
-    by: string[];
-    bz: string[];
+    by: string;
+    bz: string;
+    ca: string[];
+    cb: string;
+    cc: string;
+    cd: string[];
+
+    ce: string[] | null;
+    cf: string[] | null;
+    cg: string[] | null;
+    ch: string[] | null;
+    ci: string[] | null;
+    cj: string[] | null;
+    ck: string[] | null;
+    cl: string[] | null;
+    cm: string[] | null;
+    cn: string[] | null;
+    co: string[] | null;
+    cp: string[] | null;
+    cq: string[];
+    cr: string[];
+    cs: string[];
+    ct: string[];
+
+    cu: string;
+    cv: string;
+    cw: string;
+    cx: string[];
+    cy: string;
+    cz: string;
+    da: string;
+    db: string;
+    dc: string;
+    dd: string;
+    de: string[];
+    df: string[];
+    dg: string[];
+    dh: string[];
+    di: string[];
   };
 
   expectEqual<typeof serverFormInfo.submittedValues, Expected>({});
