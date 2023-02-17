@@ -39,12 +39,14 @@ interface BuiltInValidationAttrs {
 // Valid attributes by input type.  See:
 // https://html.spec.whatwg.org/multipage/input.html#do-not-apply
 
-type InputTextValidationAttrs = {
-  type?: "text" | "search" | "url" | "tel" | "email" | "password";
-} & Pick<
-  BuiltInValidationAttrs,
-  "required" | "minLength" | "maxLength" | "pattern"
->;
+type InputTextValidationAttrs = (
+  | { type?: "text" | "search" | "url" | "tel" | "password" }
+  | { type: "email"; multiple?: boolean }
+) &
+  Pick<
+    BuiltInValidationAttrs,
+    "required" | "minLength" | "maxLength" | "pattern"
+  >;
 
 type InputDateValidationAttrs = {
   type: "date" | "month" | "week" | "time" | "datetime-local";
@@ -71,7 +73,9 @@ type TextAreaValidationAttrs = Pick<
   "required" | "minLength" | "maxLength"
 >;
 
-type SelectValidationAttrs = Pick<BuiltInValidationAttrs, "required">;
+type SelectValidationAttrs = {
+  multiple?: boolean;
+} & Pick<BuiltInValidationAttrs, "required">;
 
 type InputValidationAttrs =
   | InputTextValidationAttrs
@@ -119,6 +123,7 @@ interface BaseControlDefinition {
   errorMessages?: {
     [key: string]: ErrorMessage;
   };
+  multiple?: boolean;
 }
 
 export interface InputDefinition extends BaseControlDefinition {
@@ -182,9 +187,42 @@ export type ServerOnlyCustomValidations<T extends FormDefinition> = Partial<{
 }>;
 
 // Server-side only (currently) - validate all specified inputs in the formData
-export type ServerFormInfo<T extends FormDefinition> = {
-  submittedValues: Record<KeyOf<T["inputs"]>, string | string[] | null>;
-  inputs: Record<KeyOf<T["inputs"]>, InputInfo | InputInfo[]>;
+export type ServerFormInfo<
+  FormDef extends FormDefinition,
+  FormDefInputs extends FormDef["inputs"] = FormDef["inputs"]
+> = {
+  submittedValues: {
+    [Key in KeyOf<FormDefInputs>]: FormDefInputs[Key]["element"] extends "textarea"
+      ? FormDefInputs[Key]["multiple"] extends true
+        ? string[]
+        : string
+      : FormDefInputs[Key]["element"] extends "select"
+      ? FormDefInputs[Key]["multiple"] extends true
+        ? string[]
+        : FormDefInputs[Key] extends { validationAttrs: object }
+        ? FormDefInputs[Key]["validationAttrs"] extends { multiple: true }
+          ? string[]
+          : string
+        : string
+      : FormDefInputs[Key] extends { validationAttrs: object }
+      ? FormDefInputs[Key]["validationAttrs"] extends { type: "checkbox" }
+        ? FormDefInputs[Key]["validationAttrs"] extends { required: true }
+          ? string[]
+          : string[] | null
+        : FormDefInputs[Key]["validationAttrs"] extends { type: "email" }
+        ? FormDefInputs[Key]["multiple"] extends true
+          ? string[]
+          : FormDefInputs[Key]["validationAttrs"] extends { multiple: true }
+          ? string[]
+          : string
+        : FormDefInputs[Key]["multiple"] extends true
+        ? string[]
+        : string
+      : FormDefInputs[Key]["multiple"] extends true
+      ? string[]
+      : string;
+  };
+  inputs: Record<KeyOf<FormDefInputs>, InputInfo | InputInfo[]>;
   valid: boolean;
 };
 
@@ -486,8 +524,48 @@ export async function validateServerFormData<T extends FormDefinition>(
   >;
   await Promise.all(
     entries.map(async ([inputName, inputDef]) => {
-      let values = formData.getAll(inputName);
-      if (formData.has(inputName)) {
+      if (!formData.has(inputName)) {
+        // No values submitted
+        let inputInfo: InputInfo = {
+          value: null,
+          touched: true,
+          dirty: true,
+          state: "done",
+          validity: await validateInput(
+            inputName,
+            inputDef.validationAttrs,
+            inputDef.customValidations,
+            "",
+            undefined,
+            formData
+          ),
+        };
+        inputs[inputName] = inputInfo;
+        // FIXME: ???
+        // @ts-expect-error
+        submittedValues[inputName] = null;
+      } else if (
+        // Multiple input controls rendered
+        // <input name="thing">
+        // <input name="thing">
+        inputDef.multiple ||
+        // <select name="thing" multiple>
+        (inputDef.element === "select" && inputDef.validationAttrs?.multiple) ||
+        // <input type="email" name="thing" multiple>
+        ((inputDef.element == null || inputDef.element === "input") &&
+          inputDef.validationAttrs?.type === "email" &&
+          inputDef.validationAttrs?.multiple) ||
+        // Checkboxes are handled slightly different from normal "render multiple
+        // input controls" since they're inherently "choose one or more" behavior
+        // like a <select multiple>.
+        // <input type="checkbox" name="thing">
+        // <input type="checkbox" name="thing">
+        ((inputDef.element == null || inputDef.element === "input") &&
+          inputDef.validationAttrs?.type === "checkbox")
+      ) {
+        // This input can have multiple values submitted for the same name,
+        // so use getAll() and store in a string[]
+        let values = formData.getAll(inputName);
         for (let value of values) {
           if (typeof value === "string") {
             // Always assume inputs have been modified during SSR validation
@@ -508,14 +586,18 @@ export async function validateServerFormData<T extends FormDefinition>(
                 formData
               ),
             };
-            // Add the values to inputs/submittedValues properly depending on if
-            // we've encountered multiple values for this input name or not
-            addValueFromSingleOrMultipleInput(inputName, inputInfo, inputs);
-            addValueFromSingleOrMultipleInput(
-              inputName,
-              value,
-              submittedValues
-            );
+            if (Array.isArray(submittedValues[inputName])) {
+              // @ts-expect-error
+              submittedValues[inputName].push(value);
+            } else {
+              // @ts-expect-error
+              submittedValues[inputName] = [value];
+            }
+            if (Array.isArray(inputs[inputName])) {
+              inputs[inputName].push(inputInfo);
+            } else {
+              inputs[inputName] = [inputInfo];
+            }
             valid = valid && inputInfo.validity?.valid === true;
           } else {
             console.warn(
@@ -524,22 +606,35 @@ export async function validateServerFormData<T extends FormDefinition>(
           }
         }
       } else {
-        let inputInfo: InputInfo = {
-          value: null,
-          touched: true,
-          dirty: true,
-          state: "done",
-          validity: await validateInput(
-            inputName,
-            inputDef.validationAttrs,
-            inputDef.customValidations,
-            "",
-            undefined,
-            formData
-          ),
-        };
-        inputs[inputName] = inputInfo;
-        submittedValues[inputName] = null;
+        let value = formData.get(inputName);
+        if (typeof value === "string") {
+          // Single value input
+          let inputInfo: InputInfo = {
+            value,
+            touched: true,
+            dirty: true,
+            state: "done",
+            validity: await validateInput(
+              inputName,
+              inputDef.validationAttrs,
+              {
+                ...inputDef.customValidations,
+                ...serverCustomValidations?.[inputName],
+              },
+              value,
+              undefined,
+              formData
+            ),
+          };
+          inputs[inputName] = inputInfo;
+          // FIXME: ???
+          // @ts-expect-error
+          submittedValues[inputName] = value;
+        } else {
+          console.warn(
+            `Skipping non-string value in FormData for field [${inputName}]`
+          );
+        }
       }
     })
   );
@@ -550,11 +645,14 @@ export async function validateServerFormData<T extends FormDefinition>(
 // with multiple values
 function getInputDefaultValue<T extends FormDefinition>(
   name: string,
+  type?: InputValidationAttrs["type"],
   serverFormInfo?: ServerFormInfo<T>,
   index?: number
 ) {
   let submittedValue = serverFormInfo?.submittedValues?.[name];
-  if (Array.isArray(submittedValue)) {
+  if (type === "checkbox") {
+    return undefined;
+  } else if (Array.isArray(submittedValue)) {
     invariant(
       index != null && index >= 0,
       `Expected an "index" value for multiple-submission field "${name}"`
@@ -562,25 +660,6 @@ function getInputDefaultValue<T extends FormDefinition>(
     return submittedValue[index];
   } else if (typeof submittedValue === "string") {
     return submittedValue;
-  }
-}
-
-// Mutate `value` properly depending on whether or not we have multiple values
-// for a given input name
-function addValueFromSingleOrMultipleInput<T>(
-  name: string,
-  value: T,
-  values: Record<string, T | T[]>
-) {
-  if (name in values) {
-    let existingValue = values[name];
-    if (Array.isArray(existingValue)) {
-      existingValue.push(value);
-    } else {
-      values[name] = [existingValue, value];
-    }
-  } else {
-    values[name] = value;
   }
 }
 
@@ -678,7 +757,14 @@ function getControlAttrs<T extends SupportedControlTypes>(
     name: ctx.name,
     id: getInputId(ctx.name, ctx.id),
     className: getClasses(ctx.info, controlType, className),
-    defaultValue: getInputDefaultValue(ctx.name, ctx.serverFormInfo, index),
+    defaultValue: getInputDefaultValue(
+      ctx.name,
+      controlType === "input" && "type" in ctx.validationAttrs
+        ? (ctx.validationAttrs.type as InputValidationAttrs["type"])
+        : undefined,
+      ctx.serverFormInfo,
+      index
+    ),
     ...(shouldShowErrors(ctx.info.validity, ctx.info.state, ctx.info.touched)
       ? {
           "aria-invalid": true,
@@ -810,7 +896,12 @@ function useValidatedControl<
     wasSubmitted = true;
     let submittedValue = serverFormInfo.submittedValues[name];
     let inputInfo = serverFormInfo.inputs[name];
-    if (Array.isArray(inputInfo) || Array.isArray(submittedValue)) {
+    if (
+      (inputDef.element == null || inputDef.element === "input") &&
+      inputDef.validationAttrs?.type === "checkbox"
+    ) {
+      // Checkboxes aren't re-populated like others at the moment :/
+    } else if (Array.isArray(inputInfo) || Array.isArray(submittedValue)) {
       invariant(
         Array.isArray(inputInfo) && Array.isArray(submittedValue),
         `Incompatible serverFormInfo structure for field "${name}"`
@@ -1350,7 +1441,15 @@ export function Input<T extends FormDefinition>({
     >
       <input
         {...getInputAttrs({
-          defaultValue: getInputDefaultValue(name, serverFormInfo, index),
+          defaultValue: getInputDefaultValue(
+            name,
+            (
+              formDefinition?.inputs[name]
+                .validationAttrs as InputValidationAttrs
+            ).type,
+            serverFormInfo,
+            index
+          ),
           ...inputAttrs,
         })}
       />
@@ -1392,7 +1491,12 @@ export function TextArea<T extends FormDefinition>({
     >
       <textarea
         {...getTextAreaAttrs({
-          defaultValue: getInputDefaultValue(name, serverFormInfo, index),
+          defaultValue: getInputDefaultValue(
+            name,
+            undefined,
+            serverFormInfo,
+            index
+          ),
           ...inputAttrs,
         })}
       />
@@ -1435,7 +1539,12 @@ export function Select<T extends FormDefinition>({
     >
       <select
         {...getSelectAttrs({
-          defaultValue: getInputDefaultValue(name, serverFormInfo, index),
+          defaultValue: getInputDefaultValue(
+            name,
+            undefined,
+            serverFormInfo,
+            index
+          ),
           ...inputAttrs,
         })}
       >

@@ -37,7 +37,7 @@ interface FormSchema {
   };
 }
 
-let formDefinition: FormSchema = {
+let formDefinition = {
   inputs: {
     firstName: {
       validationAttrs: {
@@ -76,6 +76,7 @@ let formDefinition: FormSchema = {
       },
     },
     hobby: {
+      multiple: true,
       validationAttrs: {
         required: true,
       },
@@ -122,7 +123,7 @@ let formDefinition: FormSchema = {
     tooShort: (attrValue, name, value) =>
       `The ${name} field must be at least ${attrValue} characters long, but you have only entered ${value.length} characters`,
   },
-};
+} satisfies FormSchema;
 
 export const action = async ({ request }: ActionArgs) => {
   const formData = await request.formData();
@@ -176,7 +177,7 @@ function Skills() {
         <label key={s} {...labelAttrs}>
           {/* Make the id unique for this checkbox, based on value */}
           <input
-            {...{ ...inputAttrs, id: `${inputAttrs.id}--${s.toLowerCase()}` }}
+            {...{ ...inputAttrs, id: `${inputAttrs.id}--${s.toLowerCase()}`, value: s }}
           />
           &nbsp;
           {s}
@@ -208,7 +209,7 @@ function FavoriteSkill() {
         <label key={s} {...labelAttrs}>
           {/* Make the id unique for this radio, based on value */}
           <input
-            {...{ ...inputAttrs, id: `${inputAttrs.id}--${s.toLowerCase()}` }}
+            {...{ ...inputAttrs, id: `${inputAttrs.id}--${s.toLowerCase()}`, value: s }}
           />
           &nbsp;
           {s}
