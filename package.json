@@ -48,16 +48,16 @@
     "@babel/plugin-transform-runtime": "7.17.0",
     "@babel/preset-env": "7.16.11",
     "@babel/preset-react": "7.16.7",
-    "@babel/preset-typescript": "7.16.7",
+    "@babel/preset-typescript": "7.18.6",
     "@remix-run/eslint-config": "1.3.4",
     "@rollup/plugin-babel": "5.3.1",
-    "@rollup/plugin-typescript": "^11.0.0",
+    "@rollup/plugin-typescript": "11.0.0",
     "@types/react": "^18.0.19",
     "eslint": "8.12.0",
     "eslint-config-prettier": "8.5.0",
     "prettier": "2.6.2",
     "rollup": "2.70.1",
-    "typescript": "4.6.3"
+    "typescript": "4.9.5"
   },
   "dependencies": {
     "@babel/runtime": "7.17.8"
