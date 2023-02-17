@@ -1018,6 +1018,11 @@ function useValidatedControl<
   // Run validations on input value changes
   React.useEffect(() => {
     async function go() {
+      let inputEl = inputRef.current;
+      if (!inputEl) {
+        return;
+      }
+
       // If this is the first render after a server validation, consider us
       // validated and mark dirty/touched to show errors.  Then skip re-running
       // validations on the client
@@ -1295,9 +1300,8 @@ export function useValidatedSelect<T extends FormDefinition>(
   };
 }
 
-export interface FormProviderProps<
-  T extends FormDefinition
-> extends React.PropsWithChildren<{
+export interface FormProviderProps<T extends FormDefinition>
+  extends React.PropsWithChildren<{
     formDefinition: T;
     serverFormInfo?: ServerFormInfo<T>;
     formRef?: React.RefObject<HTMLFormElement>;
@@ -1334,9 +1338,8 @@ export function FormProvider<T extends FormDefinition>(
   );
 }
 
-export interface ControlWrapperProps<
-  T extends FormDefinition
-> extends React.PropsWithChildren<{
+export interface ControlWrapperProps<T extends FormDefinition>
+  extends React.PropsWithChildren<{
     name: string;
     label?: string;
     labelAttrs: React.ComponentPropsWithoutRef<"label">;
