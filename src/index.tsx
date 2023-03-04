@@ -13,9 +13,6 @@ type Mutable<T> = {
 // Restrict object keys to strings, and don't permit number/Symbol
 type KeyOf<T> = Extract<keyof T, string>;
 
-// Extract the value type for an object
-type ValueOf<T> = T[keyof T];
-
 type SupportedControlTypes = "input" | "textarea" | "select";
 type SupportedHTMLElements =
   | HTMLInputElement
@@ -25,60 +22,98 @@ type SupportedHTMLElements =
 /**
  * Validation attributes built-in to the browser
  */
+type BuiltInValidationAttr =
+  | "type"
+  | "required"
+  | "minLength"
+  | "maxLength"
+  | "min"
+  | "max"
+  | "pattern";
+
+// Dynamic attribute value function to set validation attribute based on
+// a current input value
 type BuiltInValidationAttrsFunction<T> = (fd: FormData) => T | null | undefined;
-interface BuiltInValidationAttrs {
-  type?: string | BuiltInValidationAttrsFunction<string>;
-  required?: boolean | BuiltInValidationAttrsFunction<boolean>;
-  minLength?: number | BuiltInValidationAttrsFunction<number>;
-  maxLength?: number | BuiltInValidationAttrsFunction<number>;
-  min?: number | BuiltInValidationAttrsFunction<number>;
-  max?: number | BuiltInValidationAttrsFunction<number>;
-  pattern?: string | BuiltInValidationAttrsFunction<string>;
-}
+
+// Types accepted for validation attributes
+type BuiltInValidationAttrString =
+  | string
+  | BuiltInValidationAttrsFunction<string>;
+type BuiltInValidationAttrNumber =
+  | number
+  | BuiltInValidationAttrsFunction<number>;
+type BuiltInValidationAttrBoolean =
+  | boolean
+  | BuiltInValidationAttrsFunction<boolean>;
+
+type BuiltInValidationAttrValue =
+  | BuiltInValidationAttrString
+  | BuiltInValidationAttrNumber
+  | BuiltInValidationAttrBoolean;
 
 // Valid attributes by input type.  See:
 // https://html.spec.whatwg.org/multipage/input.html#do-not-apply
+type InputTextValidationAttrs = {
+  type?: "text" | "search" | "url" | "tel" | "password";
+  required?: BuiltInValidationAttrBoolean;
+  minLength?: BuiltInValidationAttrNumber;
+  maxLength?: BuiltInValidationAttrNumber;
+  pattern?: BuiltInValidationAttrString;
+};
 
-type InputTextValidationAttrs = (
-  | { type?: "text" | "search" | "url" | "tel" | "password" }
-  | { type: "email"; multiple?: boolean }
-) &
-  Pick<
-    BuiltInValidationAttrs,
-    "required" | "minLength" | "maxLength" | "pattern"
-  >;
+type InputEmailValidationAttrs = {
+  type: "email";
+  multiple?: boolean;
+  required?: BuiltInValidationAttrBoolean;
+  minLength?: BuiltInValidationAttrNumber;
+  maxLength?: BuiltInValidationAttrNumber;
+  pattern?: BuiltInValidationAttrString;
+};
 
 type InputDateValidationAttrs = {
   type: "date" | "month" | "week" | "time" | "datetime-local";
-} & Pick<BuiltInValidationAttrs, "required" | "min" | "max">;
+  required?: BuiltInValidationAttrBoolean;
+  min?: BuiltInValidationAttrString;
+  max?: BuiltInValidationAttrString;
+};
 
 type InputNumberValidationAttrs = {
   type: "number";
-} & Pick<BuiltInValidationAttrs, "required" | "min" | "max">;
+  required?: BuiltInValidationAttrBoolean;
+  min?: BuiltInValidationAttrNumber;
+  max?: BuiltInValidationAttrNumber;
+};
 
 type InputRangeValidationAttrs = {
   type: "range";
-} & Pick<BuiltInValidationAttrs, "min" | "max">;
+  min?: BuiltInValidationAttrNumber;
+  max?: BuiltInValidationAttrNumber;
+};
 
 type InputCheckboxValidationAttrs = {
   type: "checkbox";
-} & Pick<BuiltInValidationAttrs, "required">;
+  required?: BuiltInValidationAttrBoolean;
+};
 
 type InputRadioValidationAttrs = {
   type: "radio";
-} & Pick<BuiltInValidationAttrs, "required">;
+  required?: BuiltInValidationAttrBoolean;
+};
 
-type TextAreaValidationAttrs = Pick<
-  BuiltInValidationAttrs,
-  "required" | "minLength" | "maxLength"
->;
+type TextAreaValidationAttrs = {
+  required?: BuiltInValidationAttrBoolean;
+  minLength?: BuiltInValidationAttrNumber;
+  maxLength?: BuiltInValidationAttrNumber;
+};
 
 type SelectValidationAttrs = {
+  required?: BuiltInValidationAttrBoolean;
   multiple?: boolean;
-} & Pick<BuiltInValidationAttrs, "required">;
+};
 
 type InputValidationAttrs =
   | InputTextValidationAttrs
+  | InputEmailValidationAttrs
   | InputDateValidationAttrs
   | InputNumberValidationAttrs
   | InputRangeValidationAttrs
@@ -256,7 +291,7 @@ type AssignableRef<ValueType> =
 // Map of ValidityState key -> HTML attribute (i.e., valueMissing -> required)
 const builtInValidityToAttrMapping: Record<
   ValidityStateKey,
-  KeyOf<BuiltInValidationAttrs>
+  BuiltInValidationAttr
 > = {
   typeMismatch: "type",
   valueMissing: "required",
@@ -275,10 +310,7 @@ const EMAIL_REGEX =
   /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
 
 // Mimic browser built-in validations so we can run the on the server
-const builtInValidations: Record<
-  KeyOf<BuiltInValidationAttrs>,
-  BuiltInValidator
-> = {
+const builtInValidations: Record<BuiltInValidationAttr, BuiltInValidator> = {
   type: {
     domKey: "typeMismatch",
     validate: (value, attrValue): boolean => {
@@ -463,7 +495,7 @@ async function validateInput(
 
   if (validationAttrs) {
     for (let _attr of Object.keys(validationAttrs)) {
-      let attr = _attr as KeyOf<BuiltInValidationAttrs>;
+      let attr = _attr as BuiltInValidationAttr;
       // Ignoring this "error" since the type narrowing to accomplish this
       // would be nasty due to the differences in attribute values per input
       // type.  We're going to rely on the *ValidationAttrs types to ensure
@@ -686,7 +718,7 @@ function generateFormDataFromServerFormInfo<T extends FormDefinition>(
 
 // Calculate a single validation attribute value to render onto an individual input
 function calculateValidationAttr(
-  attrValue: ValueOf<BuiltInValidationAttrs> | null,
+  attrValue: BuiltInValidationAttrValue,
   formData: FormData
 ) {
   return typeof attrValue === "function" ? attrValue(formData) : attrValue;
@@ -698,8 +730,8 @@ function calculateValidationAttrs(
   formData: FormData
 ) {
   let entries = Object.entries(validationAttrs || {}) as [
-    KeyOf<BuiltInValidationAttrs>,
-    ValueOf<BuiltInValidationAttrs>
+    BuiltInValidationAttr,
+    BuiltInValidationAttrValue
   ][];
   return entries.reduce((acc, [attrName, attrValue]) => {
     let value = calculateValidationAttr(attrValue, formData);
@@ -810,7 +842,7 @@ function getCurrentErrorMessages<T extends FormDefinition>(
     .reduce((acc, [validation, valid]) => {
       let attr = builtInValidityToAttrMapping[
         validation as ValidityStateKey
-      ] as KeyOf<BuiltInValidationAttrs>;
+      ] as BuiltInValidationAttr;
       let message =
         formDefinition?.inputs?.[inputName]?.errorMessages?.[validation] ||
         formDefinition?.errorMessages?.[validation] ||
@@ -1295,9 +1327,8 @@ export function useValidatedSelect<T extends FormDefinition>(
   };
 }
 
-export interface FormProviderProps<
-  T extends FormDefinition
-> extends React.PropsWithChildren<{
+export interface FormProviderProps<T extends FormDefinition>
+  extends React.PropsWithChildren<{
     formDefinition: T;
     serverFormInfo?: ServerFormInfo<T>;
     formRef?: React.RefObject<HTMLFormElement>;
@@ -1334,9 +1365,8 @@ export function FormProvider<T extends FormDefinition>(
   );
 }
 
-export interface ControlWrapperProps<
-  T extends FormDefinition
-> extends React.PropsWithChildren<{
+export interface ControlWrapperProps<T extends FormDefinition>
+  extends React.PropsWithChildren<{
     name: string;
     label?: string;
     labelAttrs: React.ComponentPropsWithoutRef<"label">;
