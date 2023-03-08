@@ -549,8 +549,8 @@ export async function validateServerFormData<T extends FormDefinition>(
   // @ts-expect-error
   const inputs: ServerFormInfo["inputs"] = {};
   const submittedValues = {} as ServerFormInfo<T>["submittedValues"];
-
   let valid = true;
+
   let entries = Object.entries(formDefinition.inputs) as Array<
     [KeyOf<T["inputs"]>, ControlDefinition]
   >;
@@ -576,6 +576,7 @@ export async function validateServerFormData<T extends FormDefinition>(
         // FIXME: ???
         // @ts-expect-error
         submittedValues[inputName] = null;
+        valid = valid && inputInfo.validity?.valid === true;
       } else if (
         // Multiple input controls rendered
         // <input name="thing">
@@ -662,6 +663,7 @@ export async function validateServerFormData<T extends FormDefinition>(
           // FIXME: ???
           // @ts-expect-error
           submittedValues[inputName] = value;
+          valid = valid && inputInfo.validity?.valid === true;
         } else {
           console.warn(
             `Skipping non-string value in FormData for field [${inputName}]`
