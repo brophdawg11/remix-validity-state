@@ -1052,6 +1052,11 @@ function useValidatedControl<
   // Run validations on input value changes
   React.useEffect(() => {
     async function go() {
+      let inputEl = inputRef.current;
+      if (!inputEl) {
+        return;
+      }
+
       // If this is the first render after a server validation, consider us
       // validated and mark dirty/touched to show errors.  Then skip re-running
       // validations on the client
