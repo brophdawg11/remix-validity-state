@@ -4,7 +4,7 @@
 
 > **Warning**
 >
-> This library is still in a beta stage. It's feeling more stable these days but I can't guarantee there won't be _some_ breaking changes ahead 😀. Please read the release notes for each new version as they'll always be highlighted there.
+> This library is no longer in active development as I didn't really have enough time to keep working on it in my spare time.  Feel free to fork it for personal use, but if you're looking for a production-ready solution I would recommend checking out [Conform](https://conform.guide/) which is much more actively maintained and has a lot of the same underlying "use the platform" design goals as this library.
 
 - [Remix Validity State](#remix-validity-state)
   - [Design Goals](#design-goals)
