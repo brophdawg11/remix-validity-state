@@ -2,7 +2,7 @@
 
 `remix-validity-state` is a small [React](https://reactjs.org/) form validation library that aims to embrace HTML input validation and play nicely with [Remix](https://remix.run) and [React Router](https://reactrouter.com/en/main) primitives (specifically submitting forms to `action` handlers). However, it's worth noting that this library doesn't use anything specific from Remix or React Router and could be leveraged in any React application.
 
-> **Warning**
+> [!CAUTION]
 >
 > This library is no longer in active development as I didn't really have enough time to keep working on it in my spare time.  Feel free to fork it for personal use, but if you're looking for a production-ready solution I would recommend checking out [Conform](https://conform.guide/) which is much more actively maintained and has a lot of the same underlying "use the platform" design goals as this library.
 
